@@ -3,13 +3,16 @@ import type { DomainEvent } from '../../domain/events'
 
 type Handler<T extends DomainEvent> = (event: T) => void | Promise<void>
 
-class EventBus extends EventEmitter {
+class EventBus {
+  private readonly emitter = new EventEmitter()
+
   emit<T extends DomainEvent>(event: T): boolean {
-    return super.emit(event.type, event)
+    return this.emitter.emit(event.type, event)
   }
 
   on<T extends DomainEvent>(type: T['type'], handler: Handler<T>): this {
-    return super.on(type, handler as (event: DomainEvent) => void)
+    this.emitter.on(type, handler as (event: DomainEvent) => void)
+    return this
   }
 }
 
