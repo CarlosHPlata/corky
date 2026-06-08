@@ -1,0 +1,6 @@
+{
+  "productName": "Corky Dev",
+  "win": {
+    "target": "portable"
+  }
+}

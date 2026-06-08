@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "postinstall": "electron-builder install-app-deps",
-    "build:win": "npm run build && electron-builder --win --config"
+    "build:win": "npm run build && electron-builder --win",
+    "build:dev": "npm run build && electron-builder --win --config electron-builder.dev.json"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.38.0",
