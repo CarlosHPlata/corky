@@ -39,6 +39,9 @@
     "vite": "^6.3.5",
     "vitest": "^3.2.3"
   },
+  "engines": {
+    "node": "24.x"
+  },
   "build": {
     "appId": "com.corky.app",
     "productName": "Corky",
