@@ -1,0 +1,62 @@
+import type Database from 'better-sqlite3'
+
+export function runMigrations(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS account (
+      puuid       TEXT PRIMARY KEY,
+      game_name   TEXT NOT NULL,
+      tag_line    TEXT NOT NULL,
+      platform    TEXT NOT NULL,
+      region      TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS matches (
+      match_id      TEXT PRIMARY KEY,
+      puuid         TEXT NOT NULL,
+      queue         INTEGER NOT NULL,
+      champion      TEXT NOT NULL,
+      win           INTEGER NOT NULL,
+      game_creation INTEGER NOT NULL,
+      game_duration INTEGER NOT NULL,
+      raw_json      TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS timelines (
+      match_id TEXT PRIMARY KEY,
+      raw_json TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS features (
+      match_id TEXT PRIMARY KEY,
+      json     TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS coach_reports (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      match_id   TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      model      TEXT NOT NULL,
+      content    TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS focus_tasks (
+      id          TEXT PRIMARY KEY,
+      match_id    TEXT NOT NULL,
+      description TEXT NOT NULL,
+      metric      TEXT NOT NULL,
+      comparator  TEXT NOT NULL,
+      target      REAL NOT NULL,
+      scope       TEXT NOT NULL,
+      champion    TEXT,
+      role        TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS task_evaluations (
+      task_id             TEXT NOT NULL,
+      evaluating_match_id TEXT NOT NULL,
+      result              TEXT NOT NULL,
+      actual_value        REAL,
+      PRIMARY KEY (task_id, evaluating_match_id)
+    );
+  `)
+}

@@ -16,13 +16,13 @@ Execution checklist for an agent (e.g. Claude Code). Work **top to bottom**, che
  
 ## M0 — Scaffold & match sync
  
-- [ ] Scaffold: `npm create @quick-start/electron@latest` → React + TS template. App launches and renders a blank React window.
-- [ ] Configure electron-vite to externalise `better-sqlite3` (do not bundle); verify it loads in the packaged main process.
-- [ ] Create the folder structure from `TECHNICAL_BRIEF.md` (`domain/`, `application/{commands,queries,ports,events}`, `adapters/{driving,driven}`, `infrastructure/`, `preload/`, `renderer/`, `shared/`).
-- [ ] Add config loader (`infrastructure/config.ts`) reading `RIOT_API_KEY`, `ANTHROPIC_API_KEY`, `RIOT_ID` (gameName#tagLine), `PLATFORM`/`REGION` from `.env`. Provide `.env.example`.
-- [ ] Define `shared/types.ts` DTOs: `Account`, `MatchSummary`, `MatchDetail`, `Timeline`.
-- [ ] Define ports in `application/ports/`: `MatchDataSource`, `MatchRepository`.
-- [ ] Implement `adapters/driven/sqlite/` repository with this schema (run as migration on startup):
+- [x] Scaffold: `npm create @quick-start/electron@latest` → React + TS template. App launches and renders a blank React window.
+- [x] Configure electron-vite to externalise `better-sqlite3` (do not bundle); verify it loads in the packaged main process.
+- [x] Create the folder structure from `TECHNICAL_BRIEF.md` (`domain/`, `application/{commands,queries,ports,events}`, `adapters/{driving,driven}`, `infrastructure/`, `preload/`, `renderer/`, `shared/`).
+- [x] Add config loader (`infrastructure/config.ts`) reading `RIOT_API_KEY`, `ANTHROPIC_API_KEY`, `RIOT_ID` (gameName#tagLine), `PLATFORM`/`REGION` from `.env`. Provide `.env.example`.
+- [x] Define `shared/types.ts` DTOs: `Account`, `MatchSummary`, `MatchDetail`, `Timeline`.
+- [x] Define ports in `application/ports/`: `MatchDataSource`, `MatchRepository`.
+- [x] Implement `adapters/driven/sqlite/` repository with this schema (run as migration on startup):
   ```sql
   CREATE TABLE IF NOT EXISTS account   (puuid TEXT PRIMARY KEY, game_name TEXT, tag_line TEXT, platform TEXT, region TEXT);
   CREATE TABLE IF NOT EXISTS matches   (match_id TEXT PRIMARY KEY, puuid TEXT, queue INT, champion TEXT,
@@ -32,11 +32,11 @@ Execution checklist for an agent (e.g. Claude Code). Work **top to bottom**, che
   CREATE TABLE IF NOT EXISTS coach_reports (id INTEGER PRIMARY KEY AUTOINCREMENT, match_id TEXT,
                                             created_at INT, model TEXT, content TEXT);
   ```
-- [ ] Implement `adapters/driven/riot/` client over native `fetch`, behind a token-bucket rate limiter (~20 req/s, 100/2min). Methods: resolve PUUID (`account-v1`), list match IDs (`match-v5`), fetch match detail + `/timeline`.
-- [ ] Implement command `SyncRecentMatches(count)`: resolve account once → list IDs → for each unseen ID, fetch + persist raw JSON. Idempotent (skip stored IDs).
-- [ ] Implement query `GetMatchList()`: return stored `MatchSummary[]`.
-- [ ] Wire two IPC channels (`matches:sync`, `matches:list`) through preload `contextBridge`.
-- [ ] Renderer: one screen with a "Sync last 20" button calling `window.api.syncMatches(20)`, then rendering `getMatchList()`.
+- [x] Implement `adapters/driven/riot/` client over native `fetch`, behind a token-bucket rate limiter (~20 req/s, 100/2min). Methods: resolve PUUID (`account-v1`), list match IDs (`match-v5`), fetch match detail + `/timeline`.
+- [x] Implement command `SyncRecentMatches(count)`: resolve account once → list IDs → for each unseen ID, fetch + persist raw JSON. Idempotent (skip stored IDs).
+- [x] Implement query `GetMatchList()`: return stored `MatchSummary[]`.
+- [x] Wire two IPC channels (`matches:sync`, `matches:list`) through preload `contextBridge`.
+- [x] Renderer: one screen with a "Sync last 20" button calling `window.api.syncMatches(20)`, then rendering `getMatchList()`.
 - [ ] **Acceptance:** `npm run dev` → click sync → matches appear → re-running does not re-fetch. Riot key never reaches the renderer.
 ---
  

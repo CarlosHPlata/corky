@@ -31,7 +31,11 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- [ ] **Principle IV — Hexagonal Architecture**: `domain/` and `application/` import no framework or adapter SDK.
+- [ ] **Principle VI — Secrets in Main Process**: No keys or credentials reach preload or renderer.
+- [ ] **Principle VIII — Frontend First**: UI screen built and approved against stubs before any backend wiring starts.
+- [ ] **Principle V — Test-First**: All domain/application units have Vitest tests backed by stored fixtures.
+- [ ] **Principle VII — Offline-First**: Raw data stored locally; feature extraction reads from DB, never live API.
 
 ## Project Structure
 

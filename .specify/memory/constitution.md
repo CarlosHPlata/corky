@@ -1,20 +1,20 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: (blank template) → 1.0.0
-All sections: initial population from requirements.md, technical_brief.md, plan.md
+Version change: 1.0.0 → 1.1.0
+Bump type: MINOR — new principle added (Principle VIII: Backend for Frontend — Frontend First)
 
-Modified principles: N/A (first population)
+Modified principles: none renamed
 Added sections:
-  - Core Principles (7 principles derived from requirements.md guiding principles)
-  - Compliance & Data Constraints
-  - Development Workflow
-Removed sections: N/A
+  - Principle VIII: Backend for Frontend — Frontend First
+  - Development Workflow: two new rules for frontend-first and stub data
+
+Removed sections: none
 
 Templates checked:
-  - .specify/templates/plan-template.md  ✅ Constitution Check gate aligns with Principle IV (hexagonal)
-  - .specify/templates/spec-template.md  ✅ No conflicting references; scope/requirements align
-  - .specify/templates/tasks-template.md ✅ Test discipline aligns with Principle V (test-first)
+  - .specify/templates/plan-template.md  ✅ Constitution Check gate updated to reference Principle VIII
+  - .specify/templates/spec-template.md  ✅ No conflicting references; no changes required
+  - .specify/templates/tasks-template.md ✅ No conflicting references; no changes required
 
 Deferred TODOs: none
 -->
@@ -25,7 +25,8 @@ Deferred TODOs: none
 
 ### I. Player-First Coaching
 
-Every feature MUST serve the goal of making the player a better decision-maker — not to automate decisions, reveal hidden information, or provide an information advantage over opponents.
+Every feature MUST serve the goal of making the player a better decision-maker — not to automate decisions,
+reveal hidden information, or provide an information advantage over opponents.
 
 - Features that require reading game memory, injecting code, or touching game files are FORBIDDEN.
 - Corky MUST only surface information the player can already see in the game client or post-game screen.
@@ -95,6 +96,21 @@ re-fetched for the same `match_id`.
 - This ensures analysis works offline, protects against rate-limit exhaustion, and keeps stored matches as
   stable test fixtures.
 
+### VIII. Backend for Frontend — Frontend First
+
+The UI/UX MUST be designed, iterated, and approved against stub/mock data before any backend wiring begins.
+This is the Backend for Frontend (BFF) pattern applied with a frontend-first discipline.
+
+- Each feature's renderer components MUST be built and validated using local stub data first. No feature
+  begins backend wiring until its frontend is considered settled.
+- Stub data MUST live in `src/renderer/src/stubs/` and mirror the exact shape of the `shared/types.ts` DTOs
+  so the swap to real IPC calls is a one-line change.
+- Backend wiring (IPC handler → use case → adapter) happens only after the frontend screen is signed off.
+  The wiring step MUST NOT alter the UI layout or data shape — it replaces the stub import with a
+  `window.api.*` call and nothing else.
+- This order is MANDATORY: build stub UI → review & approve → wire backend → verify end-to-end.
+  Skipping the stub phase to "save time" is a constitution violation.
+
 ## Compliance & Data Constraints
 
 These constraints gate implementation. A feature that violates them MUST NOT be shipped, even as a
@@ -117,6 +133,10 @@ post-MVP item.
 
 These rules apply to every task in the build plan.
 
+- **Frontend first (Principle VIII)**: Every UI screen is built against stubs in `src/renderer/src/stubs/`
+  before any IPC or backend work begins. Stubs match `shared/types.ts` DTOs exactly.
+- **Backend wiring is a separate, later step**: Once a screen is signed off visually, replace the stub import
+  with the real `window.api.*` call. The UI MUST NOT change during this step.
 - **Folder structure is fixed**: Follow `src/main/{domain,application,adapters,infrastructure}`, `src/preload`,
   `src/renderer`, `src/shared` as defined in `technical_brief.md`. New files go in the correct layer; no
   shortcuts.
@@ -126,8 +146,9 @@ These rules apply to every task in the build plan.
 - **External `better-sqlite3`**: Must be externalised in electron-vite config and rebuilt against Electron's
   ABI. Do not bundle it.
 - **Constitution Check in every plan**: The `plan-template.md` Constitution Check gate MUST reference these
-  principles. A feature plan that does not pass the hexagonal constraint (Principle IV) and the secrets
-  constraint (Principle VI) MUST NOT proceed to implementation.
+  principles. A feature plan that does not pass the hexagonal constraint (Principle IV), the secrets
+  constraint (Principle VI), and the frontend-first constraint (Principle VIII) MUST NOT proceed to
+  implementation.
 
 ## Governance
 
@@ -136,10 +157,10 @@ These rules apply to every task in the build plan.
   (MAJOR for principle removal/redefinition; MINOR for new principle or section; PATCH for clarifications),
   and (3) a propagation check across all `.specify/templates/` files.
 - All feature plans and task lists MUST include a Constitution Check that verifies compliance with Principles
-  IV, V, VI, and VII as minimum gates.
+  IV, V, VI, VII, and VIII as minimum gates.
 - Violations that are truly necessary MUST be documented in the plan's Complexity Tracking table with a
   rationale and the simpler alternative that was rejected.
 - The runtime guidance file is `CLAUDE.md` (project root); agent-specific behaviour lives there and does not
   override this constitution.
 
-**Version**: 1.0.0 | **Ratified**: 2026-06-08 | **Last Amended**: 2026-06-08
+**Version**: 1.1.0 | **Ratified**: 2026-06-08 | **Last Amended**: 2026-06-08
