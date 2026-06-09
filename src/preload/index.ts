@@ -1,12 +1,17 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
-  IpcApi, MatchSummary, SummonerProfile, LpSnapshot, CoachReport, SessionAnalysis,
+  IpcApi, MatchSummary, MatchPage, MatchPageRequest, MatchReport,
+  SummonerProfile, LpSnapshot, CoachReport, SessionAnalysis,
   SessionGoal, SessionGoalInput
 } from '../shared/types'
 
 const api: IpcApi = {
-  syncMatches: (count: number) => ipcRenderer.invoke('matches:sync', count),
+  syncMatches: (count: number, start?: number) => ipcRenderer.invoke('matches:sync', count, start),
   getMatchList: (): Promise<MatchSummary[]> => ipcRenderer.invoke('matches:list'),
+  getMatchPage: (req: MatchPageRequest): Promise<MatchPage> =>
+    ipcRenderer.invoke('matches:page', req),
+  getMatchReport: (matchId: string): Promise<MatchReport | null> =>
+    ipcRenderer.invoke('report:match', matchId),
   syncProfile: () => ipcRenderer.invoke('summoner:sync'),
   getSummonerProfile: (): Promise<SummonerProfile | null> => ipcRenderer.invoke('summoner:get'),
   getLpHistory: (): Promise<LpSnapshot[]> => ipcRenderer.invoke('summoner:lp-history'),

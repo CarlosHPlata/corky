@@ -15,7 +15,7 @@ export class SyncRecentMatches {
     private readonly config: SyncRecentMatchesConfig
   ) {}
 
-  async execute(count: number): Promise<void> {
+  async execute(count: number, start = 0): Promise<void> {
     const account = await this.dataSource.resolveAccount(
       this.config.riotId,
       this.config.platform,
@@ -23,7 +23,12 @@ export class SyncRecentMatches {
     )
     this.repository.upsertAccount(account)
 
-    const matchIds = await this.dataSource.listMatchIds(account.puuid, this.config.region, count)
+    const matchIds = await this.dataSource.listMatchIds(
+      account.puuid,
+      this.config.region,
+      count,
+      start
+    )
     const unseen = matchIds.filter((id) => !this.repository.hasMatch(id))
 
     for (const matchId of unseen) {

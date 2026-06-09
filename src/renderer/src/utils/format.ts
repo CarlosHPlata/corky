@@ -18,6 +18,23 @@ export function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+/** Riot queueId → short human label for the match list / report. */
+const QUEUE_LABELS: Record<number, string> = {
+  420: 'Ranked Solo',
+  440: 'Ranked Flex',
+  400: 'Normal Draft',
+  430: 'Normal Blind',
+  450: 'ARAM',
+  490: 'Quickplay',
+  700: 'Clash',
+  1700: 'Arena',
+  1900: 'URF'
+}
+
+export function queueLabel(queueId: number): string {
+  return QUEUE_LABELS[queueId] ?? 'Custom'
+}
+
 /** Relative time from an epoch-ms timestamp: "14m ago", "2h ago", "Yesterday", "3d ago". */
 export function relativeTime(epochMs: number): string {
   const diffMs = Date.now() - epochMs

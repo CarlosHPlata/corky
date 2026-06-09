@@ -1,0 +1,214 @@
+{
+  "metadata": {
+    "matchId": "EUW1_LOSS_002",
+    "participants": [
+      "PUUID_1",
+      "PUUID_2",
+      "PUUID_PLAYER",
+      "PUUID_4",
+      "PUUID_5",
+      "PUUID_6",
+      "PUUID_7",
+      "PUUID_8",
+      "PUUID_9",
+      "PUUID_10"
+    ]
+  },
+  "info": {
+    "queueId": 420,
+    "gameCreation": 1749000000000,
+    "gameDuration": 1800,
+    "participants": [
+      {
+        "participantId": 1,
+        "puuid": "PUUID_1",
+        "teamId": 100,
+        "teamPosition": "TOP",
+        "championName": "Garen",
+        "win": false,
+        "kills": 4,
+        "deaths": 5,
+        "assists": 6,
+        "totalMinionsKilled": 180,
+        "neutralMinionsKilled": 0,
+        "goldEarned": 12350,
+        "visionScore": 16,
+        "challenges": {
+          "killParticipation": 0.4
+        }
+      },
+      {
+        "participantId": 2,
+        "puuid": "PUUID_2",
+        "teamId": 100,
+        "teamPosition": "JUNGLE",
+        "championName": "LeeSin",
+        "win": false,
+        "kills": 5,
+        "deaths": 6,
+        "assists": 7,
+        "totalMinionsKilled": 210,
+        "neutralMinionsKilled": 60,
+        "goldEarned": 12800,
+        "visionScore": 17,
+        "challenges": {
+          "killParticipation": 0.4
+        }
+      },
+      {
+        "participantId": 3,
+        "puuid": "PUUID_PLAYER",
+        "teamId": 100,
+        "teamPosition": "MIDDLE",
+        "championName": "Ahri",
+        "win": false,
+        "kills": 9,
+        "deaths": 2,
+        "assists": 7,
+        "totalMinionsKilled": 240,
+        "neutralMinionsKilled": 0,
+        "goldEarned": 14600,
+        "visionScore": 28,
+        "challenges": {
+          "killParticipation": 0.62
+        }
+      },
+      {
+        "participantId": 4,
+        "puuid": "PUUID_4",
+        "teamId": 100,
+        "teamPosition": "BOTTOM",
+        "championName": "Jinx",
+        "win": false,
+        "kills": 3,
+        "deaths": 5,
+        "assists": 6,
+        "totalMinionsKilled": 150,
+        "neutralMinionsKilled": 0,
+        "goldEarned": 11900,
+        "visionScore": 19,
+        "challenges": {
+          "killParticipation": 0.4
+        }
+      },
+      {
+        "participantId": 5,
+        "puuid": "PUUID_5",
+        "teamId": 100,
+        "teamPosition": "UTILITY",
+        "championName": "Thresh",
+        "win": false,
+        "kills": 4,
+        "deaths": 6,
+        "assists": 7,
+        "totalMinionsKilled": 180,
+        "neutralMinionsKilled": 0,
+        "goldEarned": 12350,
+        "visionScore": 20,
+        "challenges": {
+          "killParticipation": 0.4
+        }
+      },
+      {
+        "participantId": 6,
+        "puuid": "PUUID_6",
+        "teamId": 200,
+        "teamPosition": "TOP",
+        "championName": "Sett",
+        "win": true,
+        "kills": 5,
+        "deaths": 4,
+        "assists": 5,
+        "totalMinionsKilled": 210,
+        "neutralMinionsKilled": 0,
+        "goldEarned": 12800,
+        "visionScore": 21,
+        "challenges": {
+          "killParticipation": 0.4
+        }
+      },
+      {
+        "participantId": 7,
+        "puuid": "PUUID_7",
+        "teamId": 200,
+        "teamPosition": "JUNGLE",
+        "championName": "Vi",
+        "win": true,
+        "kills": 6,
+        "deaths": 5,
+        "assists": 6,
+        "totalMinionsKilled": 240,
+        "neutralMinionsKilled": 60,
+        "goldEarned": 13250,
+        "visionScore": 22,
+        "challenges": {
+          "killParticipation": 0.4
+        }
+      },
+      {
+        "participantId": 8,
+        "puuid": "PUUID_8",
+        "teamId": 200,
+        "teamPosition": "MIDDLE",
+        "championName": "Zed",
+        "win": true,
+        "kills": 3,
+        "deaths": 6,
+        "assists": 7,
+        "totalMinionsKilled": 150,
+        "neutralMinionsKilled": 0,
+        "goldEarned": 11900,
+        "visionScore": 23,
+        "challenges": {
+          "killParticipation": 0.4
+        }
+      },
+      {
+        "participantId": 9,
+        "puuid": "PUUID_9",
+        "teamId": 200,
+        "teamPosition": "BOTTOM",
+        "championName": "Caitlyn",
+        "win": true,
+        "kills": 4,
+        "deaths": 4,
+        "assists": 5,
+        "totalMinionsKilled": 180,
+        "neutralMinionsKilled": 0,
+        "goldEarned": 12350,
+        "visionScore": 24,
+        "challenges": {
+          "killParticipation": 0.4
+        }
+      },
+      {
+        "participantId": 10,
+        "puuid": "PUUID_10",
+        "teamId": 200,
+        "teamPosition": "UTILITY",
+        "championName": "Lux",
+        "win": true,
+        "kills": 5,
+        "deaths": 5,
+        "assists": 6,
+        "totalMinionsKilled": 210,
+        "neutralMinionsKilled": 0,
+        "goldEarned": 12800,
+        "visionScore": 15,
+        "challenges": {
+          "killParticipation": 0.4
+        }
+      }
+    ],
+    "teams": [
+      {
+        "teamId": 100,
+        "win": false
+      },
+      {
+        "teamId": 200,
+        "win": true
+      }
+    ]
+  }
+}

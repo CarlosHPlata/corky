@@ -9,7 +9,7 @@ import { FocusTask } from '../components/coaching/FocusTask'
 import { ChampAvatar } from '../components/ChampAvatar'
 import { GoalNotes } from '../components/GoalNotes'
 import { Icon } from '../components/Icon'
-import { MATCHES, REPORT_LOSS, REPORT_WIN, type MatchMock } from '../data/mockData'
+import { MATCHES, REPORT_LOSS, REPORT_WIN } from '../data/mockData'
 import type { AppData } from '../data/useAppData'
 import { useQuickAnalysis } from '../data/useQuickAnalysis'
 import type {
@@ -134,7 +134,7 @@ function Hero({ profile, matches, net, onNav }: {
 }
 
 // ── NextFocus: last game's next-game tasks (mock — analysis layer, wired later) ──
-function NextFocus({ onOpen }: { onOpen: (m: MatchMock) => void }) {
+function NextFocus({ onOpen, latestMatchId }: { onOpen: (matchId: string) => void; latestMatchId?: string }) {
   const latest = MATCHES[0]
   const report = latest.win ? REPORT_WIN : REPORT_LOSS
   const tasks = report.nextFocus
@@ -155,7 +155,8 @@ function NextFocus({ onOpen }: { onOpen: (m: MatchMock) => void }) {
             {' '}Corky checks these automatically after your next game.
           </p>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => onOpen(latest)}
+        <Button variant="ghost" size="sm" onClick={() => latestMatchId && onOpen(latestMatchId)}
+          disabled={!latestMatchId}
           iconRight={<Icon name="chevron-right" size={15} />} style={{ flex: 'none' }}>
           Last report
         </Button>
@@ -408,7 +409,7 @@ function CenteredNote({ children }: { children: React.ReactNode }) {
 }
 
 export function Home({ data, onOpen, onNav }: {
-  data: AppData; onOpen: (m: MatchMock) => void; onNav: (s: Screen) => void
+  data: AppData; onOpen: (matchId: string) => void; onNav: (s: Screen) => void
 }) {
   const { profile, matches, lpHistory, loading, syncing, error, sync } = data
   const pool = champPool(matches)
@@ -492,7 +493,7 @@ export function Home({ data, onOpen, onNav }: {
         <GoalNotes />
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, alignItems: 'start' }}>
-          <NextFocus onOpen={onOpen} />
+          <NextFocus onOpen={onOpen} latestMatchId={matches[0]?.matchId} />
           <QuickAnalysis />
         </div>
       </section>

@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3'
 import type { Account, MatchSummary, MatchDetail, Timeline } from '@shared/types'
-import type { MatchRepository } from '../../../application/ports/MatchRepository'
+import type { MatchRepository, MatchPageOptions } from '../../../application/ports/MatchRepository'
 import { extractMatchSummary } from '../../../domain/matchSummary'
 
 function toAccount(row: Record<string, string>): Account {
@@ -70,6 +70,35 @@ export class SqliteMatchRepository implements MatchRepository {
       .prepare('SELECT raw_json FROM matches WHERE puuid = ? ORDER BY game_creation DESC')
       .all(puuid) as { raw_json: string }[]
     return rows.map((r) => extractMatchSummary(JSON.parse(r.raw_json), puuid))
+  }
+
+  listMatchesPage(puuid: string, opts: MatchPageOptions): MatchSummary[] {
+    const hasCursor = opts.beforeCreation !== undefined && opts.beforeMatchId !== undefined
+    const sql = hasCursor
+      ? `SELECT raw_json FROM matches
+         WHERE puuid = ?
+           AND (game_creation < ? OR (game_creation = ? AND match_id < ?))
+         ORDER BY game_creation DESC, match_id DESC
+         LIMIT ?`
+      : `SELECT raw_json FROM matches
+         WHERE puuid = ?
+         ORDER BY game_creation DESC, match_id DESC
+         LIMIT ?`
+    const rows = (
+      hasCursor
+        ? this.db
+            .prepare(sql)
+            .all(puuid, opts.beforeCreation, opts.beforeCreation, opts.beforeMatchId, opts.limit)
+        : this.db.prepare(sql).all(puuid, opts.limit)
+    ) as { raw_json: string }[]
+    return rows.map((r) => extractMatchSummary(JSON.parse(r.raw_json), puuid))
+  }
+
+  countMatches(puuid: string): number {
+    const row = this.db
+      .prepare('SELECT COUNT(*) AS n FROM matches WHERE puuid = ?')
+      .get(puuid) as { n: number }
+    return row.n
   }
 
   getMatchDetail(matchId: string): MatchDetail | null {

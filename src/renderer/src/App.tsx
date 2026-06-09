@@ -8,7 +8,6 @@ import { ChampSelect } from './screens/ChampSelect'
 import { Trends } from './screens/Trends'
 import { Settings } from './screens/Settings'
 import { Home } from './screens/Home'
-import { type MatchMock } from './data/mockData'
 import { useAppData } from './data/useAppData'
 import { rankLabel } from './utils/format'
 import { profileIconUrl } from './utils/ddragon'
@@ -136,38 +135,36 @@ function TopBar({ title, subtitle, onSync, syncing, left }: {
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home')
-  const [match, setMatch] = useState<MatchMock | null>(null)
+  const [matchId, setMatchId] = useState<string | null>(null)
   const [analyzed, setAnalyzed] = useState<Record<string, boolean>>({})
 
   const data = useAppData()
 
-  function nav(id: Screen) { setScreen(id); if (id !== 'report') setMatch(null) }
-  function openMatch(m: MatchMock) { setMatch(m); setScreen('report') }
+  function nav(id: Screen) { setScreen(id); if (id !== 'report') setMatchId(null) }
+  function openMatch(id: string) { setMatchId(id); setScreen('report') }
 
   const titles: Record<Screen, [string, string | null]> = {
     home:    ['Overview', 'Your session at a glance'],
     history: ['Match history', `Your last ${data.matches.length} ranked games`],
-    report:  ['Post-game report', null],
+    report:  ['Post-game report', 'The numbers behind this game'],
     champ:   ['Champion select', 'Live · reading your lobby'],
     trends:  ['Trends', 'Patterns across your recent games'],
     settings:['Settings', null],
   }
 
-  const [title, subtitle] = match && screen === 'report'
-    ? [`${match.champ} · ${match.win ? 'Win' : 'Loss'}`, `${match.queue} · ${match.dur}`]
-    : titles[screen]
+  const [title, subtitle] = titles[screen]
 
   const showSync = screen === 'home' || screen === 'history' || screen === 'report'
   const backBtn = screen === 'report'
     ? <Button variant="ghost" size="sm" onClick={() => nav('history')} iconLeft={<Icon name="chevron-left" size={16} />}>Back</Button>
     : undefined
 
-  const key = screen === 'report' ? `report-${match?.id ?? 'x'}` : screen
+  const key = screen === 'report' ? `report-${matchId ?? 'x'}` : screen
 
   let body: React.ReactNode
   if (screen === 'home') body = <Home data={data} onOpen={openMatch} onNav={nav} />
   else if (screen === 'history') body = <MatchHistory onOpen={openMatch} />
-  else if (screen === 'report' && match) body = <CoachReport match={match} analyzed={!!analyzed[match.id]} onAnalyzed={() => setAnalyzed(a => ({ ...a, [match.id]: true }))} />
+  else if (screen === 'report' && matchId) body = <CoachReport matchId={matchId} analyzed={!!analyzed[matchId]} onAnalyzed={() => setAnalyzed(a => ({ ...a, [matchId]: true }))} />
   else if (screen === 'champ') body = <ChampSelect />
   else if (screen === 'trends') body = <Trends />
   else body = <Settings />
