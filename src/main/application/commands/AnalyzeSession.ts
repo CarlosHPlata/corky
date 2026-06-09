@@ -1,11 +1,13 @@
 import type { SessionAnalysis } from '@shared/types'
 import type { MatchRepository } from '../ports/MatchRepository'
 import type { SummonerRepository } from '../ports/SummonerRepository'
-import type { SessionCoachingModel } from '../ports/SessionCoachingModel'
+import type { SessionCoachingModel, PlayerContext } from '../ports/SessionCoachingModel'
 import type { SessionAnalysisRepository } from '../ports/SessionAnalysisRepository'
 import type { BenchmarkDataSource } from '../ports/BenchmarkDataSource'
+import type { SessionGoalRepository } from '../ports/SessionGoalRepository'
 import { computeSessionFeatures, topChampionRole } from '../../domain/sessionFeatures'
 import { resolveGeneralBenchmark } from '../../domain/benchmark'
+import { hasContent } from '../../domain/sessionGoal'
 
 /** Below this many games we decline to read a pattern (honest about limits). */
 const MIN_GAMES = 3
@@ -25,6 +27,7 @@ export class AnalyzeSession {
     private readonly model: SessionCoachingModel,
     private readonly modelName: string,
     private readonly benchmarkSource: BenchmarkDataSource | null = null,
+    private readonly goalRepo: SessionGoalRepository | null = null,
     private readonly now: () => number = () => Date.now()
   ) {}
 
@@ -58,7 +61,15 @@ export class AnalyzeSession {
     }
 
     const features = computeSessionFeatures({ matches, profile, lpHistory, benchmark })
-    const output = await this.model.analyzeSession(features, this.modelName)
+
+    // The player's own goal/notes, passed as stated intent (not a computed fact)
+    // so the coach can speak to what they're working on. Omitted when unset, so
+    // a no-goal run is identical to before (FR-010, US3).
+    const goal = this.goalRepo?.get() ?? null
+    const playerContext: PlayerContext | undefined =
+      goal && hasContent(goal) ? { goal: goal.goal, notes: goal.notes } : undefined
+
+    const output = await this.model.analyzeSession(features, this.modelName, playerContext)
 
     const analysis: SessionAnalysis = {
       insights: output.insights,

@@ -7,6 +7,9 @@ import type { GetLpHistory } from '../../application/queries/GetLpHistory'
 import type { GetCoachReport } from '../../application/queries/GetCoachReport'
 import type { GetSessionAnalysis } from '../../application/queries/GetSessionAnalysis'
 import type { AnalyzeSession } from '../../application/commands/AnalyzeSession'
+import type { GetSessionGoal } from '../../application/queries/GetSessionGoal'
+import type { SaveSessionGoal } from '../../application/commands/SaveSessionGoal'
+import type { SessionGoalInput } from '@shared/types'
 
 export function registerIpcHandlers(deps: {
   syncRecentMatches: SyncRecentMatches
@@ -17,6 +20,8 @@ export function registerIpcHandlers(deps: {
   getCoachReport: GetCoachReport
   getSessionAnalysis: GetSessionAnalysis
   analyzeSession: AnalyzeSession
+  getSessionGoal: GetSessionGoal
+  saveSessionGoal: SaveSessionGoal
 }): void {
   ipcMain.handle('matches:sync', async (_event, count: number) => {
     await deps.syncRecentMatches.execute(count)
@@ -48,5 +53,13 @@ export function registerIpcHandlers(deps: {
 
   ipcMain.handle('analysis:session:run', () => {
     return deps.analyzeSession.execute()
+  })
+
+  ipcMain.handle('goal:get', () => {
+    return deps.getSessionGoal.execute()
+  })
+
+  ipcMain.handle('goal:save', (_event, input: SessionGoalInput) => {
+    return deps.saveSessionGoal.execute(input)
   })
 }

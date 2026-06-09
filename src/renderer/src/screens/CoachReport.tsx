@@ -243,7 +243,7 @@ function ReportView({ r, m }: { r: ReportMock; m: MatchMock }) {
   const sinceWins = r.sinceLast.filter(t => t.result === 'improved' || t.result === 'held').length
   const sinceApplicable = r.sinceLast.filter(t => t.result !== 'not_applicable').length
   return (
-    <div style={{ padding: '22px 24px 60px', maxWidth: 'var(--content-max)', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 26 }}>
+    <div style={{ padding: '22px 18px 60px', maxWidth: 'var(--content-max)', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 26 }}>
       <VerdictCard result={m.win ? 'win' : 'loss'} champion={m.champ} duration={m.dur} queue={m.queue}
         tags={
           <>

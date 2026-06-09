@@ -131,6 +131,22 @@ export interface SessionAnalysis {
   model: string
 }
 
+/** The player's session goal + notes, fed to the coach as stated intent. */
+export interface SessionGoal {
+  /** Short single focus statement. Trimmed, ≤ 200 chars. '' when unset. */
+  goal: string
+  /** Free-form, multi-line notes. Trimmed, ≤ 1000 chars. '' when unset. */
+  notes: string
+  /** epoch ms of the last save; null when never set. */
+  updatedAt: number | null
+}
+
+/** What the renderer submits when saving; the main process trims + caps it. */
+export interface SessionGoalInput {
+  goal: string
+  notes: string
+}
+
 export interface IpcApi {
   syncMatches: (count: number) => Promise<void>
   getMatchList: () => Promise<MatchSummary[]>
@@ -143,4 +159,8 @@ export interface IpcApi {
   runSessionAnalysis: () => Promise<SessionAnalysis>
   /** The last persisted analysis for the current account, or null if none yet. */
   getSessionAnalysis: () => Promise<SessionAnalysis | null>
+  /** The saved session goal + notes, or null if never set. */
+  getSessionGoal: () => Promise<SessionGoal | null>
+  /** Persist the goal + notes (server trims + caps); returns the stored record. */
+  saveSessionGoal: (input: SessionGoalInput) => Promise<SessionGoal>
 }

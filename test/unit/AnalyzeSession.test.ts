@@ -6,7 +6,8 @@ import type { SummonerRepository } from '../../src/main/application/ports/Summon
 import type { SessionAnalysisRepository } from '../../src/main/application/ports/SessionAnalysisRepository'
 import type { SessionCoachingModel } from '../../src/main/application/ports/SessionCoachingModel'
 import type { BenchmarkDataSource } from '../../src/main/application/ports/BenchmarkDataSource'
-import type { Account, MatchSummary, SessionAnalysis } from '../../src/shared/types'
+import type { SessionGoalRepository } from '../../src/main/application/ports/SessionGoalRepository'
+import type { Account, MatchSummary, SessionAnalysis, SessionGoal } from '../../src/shared/types'
 
 const account: Account = { puuid: 'me', gameName: 'C', tagLine: 'EUW', platform: 'euw1', region: 'europe' }
 
@@ -38,6 +39,10 @@ const okModel: SessionCoachingModel = {
     insights: [{ leak: 'deaths', headline: 'h', body: 'b', evidence: 'e', benchmarkBasis: null, confidence: 'established' }],
     noData: false
   })
+}
+
+function fakeGoalRepo(goal: SessionGoal | null): SessionGoalRepository {
+  return { get: () => goal, save: (v, at) => ({ ...v, updatedAt: at }) }
 }
 
 describe('AnalyzeSession', () => {
@@ -96,6 +101,31 @@ describe('AnalyzeSession', () => {
     const model: SessionCoachingModel = { analyzeSession: async () => { throw new Error('LLM down') } }
     const cmd = new AnalyzeSession(fakeMatchRepo([match(), match(), match()]), fakeSummonerRepo(), fakeAnalysisRepo(), model, 'm')
     await expect(cmd.execute()).rejects.toThrow()
+  })
+
+  it('forwards the saved goal + notes to the model as player intent (US2)', async () => {
+    const model = { analyzeSession: vi.fn().mockResolvedValue({ insights: [], noData: false }) } as unknown as SessionCoachingModel
+    const goal: SessionGoal = { goal: 'close my leads', notes: 'group at 15', updatedAt: 1 }
+    const cmd = new AnalyzeSession(
+      fakeMatchRepo([match(), match(), match()]), fakeSummonerRepo(), fakeAnalysisRepo(), model, 'm', null, fakeGoalRepo(goal)
+    )
+    await cmd.execute()
+    expect(model.analyzeSession).toHaveBeenCalledTimes(1)
+    const [, , playerContext] = (model.analyzeSession as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(playerContext).toEqual({ goal: 'close my leads', notes: 'group at 15' })
+  })
+
+  it('passes no player context when the goal is empty or absent (US3 — honest, unchanged)', async () => {
+    const model = { analyzeSession: vi.fn().mockResolvedValue({ insights: [], noData: false }) } as unknown as SessionCoachingModel
+    const matches = [match(), match(), match()]
+    // empty goal
+    const a = new AnalyzeSession(fakeMatchRepo(matches), fakeSummonerRepo(), fakeAnalysisRepo(), model, 'm', null, fakeGoalRepo({ goal: '', notes: '', updatedAt: 1 }))
+    await a.execute()
+    expect((model.analyzeSession as ReturnType<typeof vi.fn>).mock.calls[0][2]).toBeUndefined()
+    // no goal repo at all
+    const b = new AnalyzeSession(fakeMatchRepo(matches), fakeSummonerRepo(), fakeAnalysisRepo(), model, 'm')
+    await b.execute()
+    expect((model.analyzeSession as ReturnType<typeof vi.fn>).mock.calls[1][2]).toBeUndefined()
   })
 })
 
