@@ -610,7 +610,15 @@ code, kbd, samp, pre { font-family: var(--font-mono); }
     box-shadow var(--dur-fast) var(--ease-out);
 }
 .ck-evidence:hover { background: rgba(242,179,61,0.2); border-color: rgba(242,179,61,0.55); box-shadow: var(--glow-gold); }
-.ck-evidence__icon { width: 12px; height: 12px; opacity: 0.8; display: inline-flex; align-items: center; }
+/* Static (non-interactive) chip: a label, not a control — no pointer, no hover affordance. */
+.ck-evidence--static { cursor: default; }
+.ck-evidence--static:hover { background: var(--accent-soft); border-color: rgba(242,179,61,0.25); box-shadow: none; }
+.ck-evidence--static.ck-evidence--death:hover { background: var(--loss-soft); border-color: rgba(255,87,101,0.28); }
+.ck-evidence--static.ck-evidence--objective:hover { background: var(--objective-soft); border-color: rgba(155,123,240,0.28); }
+/* Fixed-width chip that ellipsis-truncates; full text shown via the title tooltip. */
+.ck-evidence--truncate { max-width: 220px; }
+.ck-evidence__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ck-evidence__icon { width: 12px; height: 12px; opacity: 0.8; display: inline-flex; align-items: center; flex: none; }
 .ck-evidence--death { color: var(--red-300); background: var(--loss-soft); border-color: rgba(255,87,101,0.28); }
 .ck-evidence--objective { color: var(--violet-400); background: var(--objective-soft); border-color: rgba(155,123,240,0.28); }
 

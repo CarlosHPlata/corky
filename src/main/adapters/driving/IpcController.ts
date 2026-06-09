@@ -5,6 +5,8 @@ import type { GetMatchList } from '../../application/queries/GetMatchList'
 import type { GetSummonerProfile } from '../../application/queries/GetSummonerProfile'
 import type { GetLpHistory } from '../../application/queries/GetLpHistory'
 import type { GetCoachReport } from '../../application/queries/GetCoachReport'
+import type { GetSessionAnalysis } from '../../application/queries/GetSessionAnalysis'
+import type { AnalyzeSession } from '../../application/commands/AnalyzeSession'
 
 export function registerIpcHandlers(deps: {
   syncRecentMatches: SyncRecentMatches
@@ -13,6 +15,8 @@ export function registerIpcHandlers(deps: {
   getSummonerProfile: GetSummonerProfile
   getLpHistory: GetLpHistory
   getCoachReport: GetCoachReport
+  getSessionAnalysis: GetSessionAnalysis
+  analyzeSession: AnalyzeSession
 }): void {
   ipcMain.handle('matches:sync', async (_event, count: number) => {
     await deps.syncRecentMatches.execute(count)
@@ -36,5 +40,13 @@ export function registerIpcHandlers(deps: {
 
   ipcMain.handle('report:get', (_event, matchId: string) => {
     return deps.getCoachReport.execute(matchId)
+  })
+
+  ipcMain.handle('analysis:session:get', () => {
+    return deps.getSessionAnalysis.execute()
+  })
+
+  ipcMain.handle('analysis:session:run', () => {
+    return deps.analyzeSession.execute()
   })
 }

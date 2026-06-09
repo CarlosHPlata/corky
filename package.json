@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.38.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^11.9.1",
     "bottleneck": "^2.19.5",
     "dotenv": "^16.5.0"
@@ -61,7 +62,10 @@
       {
         "from": "resources/",
         "to": "resources/",
-        "filter": ["**/*", "!icon.ico"]
+        "filter": [
+          "**/*",
+          "!icon.ico"
+        ]
       }
     ]
   }

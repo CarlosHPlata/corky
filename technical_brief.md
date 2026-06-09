@@ -59,6 +59,7 @@ These shape the post-game pipeline (see `REQUIREMENTS.md` → "the post-game rep
 - **Riot Web API** (key required, main-process only): `account-v1` (PUUID from Riot ID), `match-v5` (match + `/timeline`), `summoner-v4`/`league-v4` (rank). Routing split: **regional** routes (`europe`) for account/match, **platform** routes (`euw1`) for summoner/league.
 - **LCU (League Client API)** — no key; auth via local `lockfile` (port + password, Basic auth, self-signed cert). Champ select via `lol-champ-select/v1/session` (REST + WS); rune import via `lol-perks`.
 - **Data Dragon** — versioned static data + assets, cached locally per patch.
+- **OP.GG open MCP** (`https://mcp-api.op.gg/mcp`, streamable HTTP, no key) — public champion/lane **meta** statistics used only as the benchmark/reference layer behind personal coaching (never as a meta/tier-list product). Wrapped by a single reusable `OpggMcpClient` (Tier 1: transport, cache, timeout, typed mapping) that per-feature ports delegate to — inject the shared instance for future features. Best-effort & undocumented: bounded by a ~3s timeout, cached, and degrades to a built-in general benchmark on any failure. Meta tools only — no player-account lookups (the player's own facts come from Riot). The SDK is ESM-only, so it is excluded from electron-vite's `externalizeDepsPlugin` to be bundled into the main process.
 - *Later:* Live Client Data API (`https://127.0.0.1:2999`) for in-game own-state; local `.rofl` replays for micro.
 ## Constraints & compliance (these gate implementation)
  

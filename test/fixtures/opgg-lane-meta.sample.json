@@ -1,0 +1,26 @@
+{
+  "_note": "Assumed shape of the OP.GG lol_list_lane_meta_champions response — field names are not officially documented. The mapper reads several aliases and falls back gracefully; verify against a live response and adjust if needed.",
+  "patch": "26.11",
+  "data": [
+    {
+      "champion": "Ahri",
+      "position": "MID",
+      "win_rate": 51.2,
+      "pick_rate": 8.4,
+      "ban_rate": 3.1,
+      "tier": "2",
+      "kda": 2.8,
+      "cs_per_min": 7.4
+    },
+    {
+      "champion": "Syndra",
+      "position": "MID",
+      "win_rate": 49.1,
+      "pick_rate": 4.2,
+      "ban_rate": 1.2,
+      "tier": "3",
+      "kda": 2.5,
+      "cs_per_min": 7.1
+    }
+  ]
+}
