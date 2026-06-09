@@ -13,6 +13,8 @@ import { OpggBenchmarkDataSource } from '../adapters/driven/opgg/OpggBenchmarkDa
 import { SyncRecentMatches } from '../application/commands/SyncRecentMatches'
 import { SyncSummonerProfile } from '../application/commands/SyncSummonerProfile'
 import { GetMatchList } from '../application/queries/GetMatchList'
+import { GetMatchPage } from '../application/queries/GetMatchPage'
+import { GetMatchReport } from '../application/queries/GetMatchReport'
 import { GetSummonerProfile } from '../application/queries/GetSummonerProfile'
 import { GetLpHistory } from '../application/queries/GetLpHistory'
 import { GetCoachReport } from '../application/queries/GetCoachReport'
@@ -53,6 +55,8 @@ export function buildContainer() {
   )
 
   const getMatchList = new GetMatchList(matchRepo)
+  const getMatchPage = new GetMatchPage(matchRepo)
+  const getMatchReport = new GetMatchReport(matchRepo)
   const getSummonerProfile = new GetSummonerProfile(matchRepo, summonerRepo)
   const getLpHistory = new GetLpHistory(matchRepo, summonerRepo)
   const getCoachReport = new GetCoachReport(reportRepo)
@@ -82,6 +86,8 @@ export function buildContainer() {
     syncRecentMatches,
     syncSummonerProfile,
     getMatchList,
+    getMatchPage,
+    getMatchReport,
     getSummonerProfile,
     getLpHistory,
     getCoachReport,

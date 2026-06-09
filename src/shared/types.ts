@@ -24,6 +24,133 @@ export interface MatchSummary {
   gameDuration: number
 }
 
+/** Request for one infinite-scroll page of the match list (spec 003 / US1). */
+export interface MatchPageRequest {
+  /** Opaque cursor from a previous page's `nextCursor`; omitted/null ⇒ first page. */
+  before?: string | null
+  /** Page size; defaults to 20, clamped 1..50 in the query. */
+  limit?: number
+}
+
+/** One page of the match list. */
+export interface MatchPage {
+  /** Newest-first within the page. */
+  matches: MatchSummary[]
+  /** Opaque cursor for the next (older) page; null ⇒ local store exhausted. */
+  nextCursor: string | null
+  /** Hint that Riot may hold older games not yet stored locally. */
+  hasMoreRemote: boolean
+}
+
+/** A participant line in the matchup roster. */
+export interface RosterEntry {
+  champion: string
+  role: string
+  teamId: number
+  isYou: boolean
+  isLaneOpponent: boolean
+  kills: number
+  deaths: number
+  assists: number
+  cs: number
+  gold: number
+}
+
+/** Who the player faced — lanes for one game. */
+export interface Matchup {
+  you: RosterEntry
+  /** null ⇒ no single opposed lane (jungle/roam, or a non-lane mode). */
+  laneOpponent: RosterEntry | null
+  /** 5 entries incl. you, role-ordered TOP→SUP. */
+  allies: RosterEntry[]
+  /** 5 entries, role-ordered. */
+  enemies: RosterEntry[]
+}
+
+/** The headline economy line for the player's game. */
+export interface MatchCore {
+  champion: string
+  role: string
+  win: boolean
+  kills: number
+  deaths: number
+  assists: number
+  kdaRatio: number
+  cs: number
+  csPerMin: number
+  gold: number
+  goldPerMin: number
+  durationSec: number
+  queue: number
+}
+
+/** The decided-by-numbers block. `null` ⇒ "not reached", never substituted with 0. */
+export interface Breakdown {
+  csAt10: number | null
+  csPerMin: number
+  goldAt14: number | null
+  goldAt24: number | null
+  visionScore: number
+  soloDeaths: number
+  /** 0–1 fraction; renderer formats as %. */
+  killParticipation: number
+}
+
+/** One sampled point of the team gold-difference curve (player-team positive). */
+export interface GoldFrame {
+  tMin: number
+  /** Raw gold; renderer may scale to thousands. */
+  goldDiff: number
+}
+
+/** A data-inferred timeline moment (deterministic; never AI-written). */
+export interface Highlight {
+  tMin: number
+  kind: 'objective' | 'teamfight' | 'death'
+  /** Factual label, e.g. "Baron — Blue", "Team wiped 4–1", "Death → −1.6k". */
+  label: string
+  /** Short factual elaboration; no coaching. */
+  detail?: string
+  /** Which side benefited; 'neutral' when even. */
+  side: 'ally' | 'enemy' | 'neutral'
+}
+
+/** The gold-difference timeline + its highlights (US3). */
+export interface GoldTimeline {
+  frames: GoldFrame[]
+  endMin: number
+  highlights: Highlight[]
+}
+
+/** One of the player's deaths, positioned on the map (US4). */
+export interface DeathMarker {
+  /** 1-based order across the game. */
+  n: number
+  tMin: number
+  /** 0–100, normalized to the map (Y inverted for screen space). */
+  xPct: number
+  yPct: number
+}
+
+/** The player's death locations for one game. */
+export interface DeathMap {
+  deaths: DeathMarker[]
+  /** == deaths.length. */
+  count: number
+}
+
+/** The full FACTUAL match report (no LLM). `timeline`/`deathMap` null when timeline JSON absent. */
+export interface MatchReport {
+  matchId: string
+  core: MatchCore
+  matchup: Matchup
+  breakdown: Breakdown
+  timeline: GoldTimeline | null
+  deathMap: DeathMap | null
+  /** false ⇒ render the "not available for this game" note (FR-025). */
+  timelineAvailable: boolean
+}
+
 export interface MatchDetail {
   matchId: string
   rawJson: string
@@ -148,8 +275,13 @@ export interface SessionGoalInput {
 }
 
 export interface IpcApi {
-  syncMatches: (count: number) => Promise<void>
+  /** `start` fetches an older Riot window (match-v5 offset) for infinite scroll. */
+  syncMatches: (count: number, start?: number) => Promise<void>
   getMatchList: () => Promise<MatchSummary[]>
+  /** One infinite-scroll page of the match list (US1). */
+  getMatchPage: (req: MatchPageRequest) => Promise<MatchPage>
+  /** The factual, computed report for one match, or null if not stored (US2–US4). */
+  getMatchReport: (matchId: string) => Promise<MatchReport | null>
   syncProfile: () => Promise<void>
   getSummonerProfile: () => Promise<SummonerProfile | null>
   getLpHistory: () => Promise<LpSnapshot[]>

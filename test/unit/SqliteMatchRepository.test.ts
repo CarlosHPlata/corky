@@ -114,4 +114,46 @@ describe('SqliteMatchRepository', () => {
     repo.insertTimeline({ matchId: 'KR_123456', rawJson: '{"frames":[]}' })
     expect(repo.getTimeline('KR_123456')?.rawJson).toBe('{"frames":[]}')
   })
+
+  it('countMatches counts the player rows', () => {
+    expect(repo.countMatches(account.puuid)).toBe(0)
+    store('KR_1', 100)
+    store('KR_2', 200)
+    expect(repo.countMatches(account.puuid)).toBe(2)
+  })
+
+  it('listMatchesPage returns a newest-first page and a cursor pages without overlap', () => {
+    for (let i = 1; i <= 5; i++) store(`KR_${i}`, i * 100)
+    const page1 = repo.listMatchesPage(account.puuid, { limit: 2 })
+    expect(page1.map((m) => m.matchId)).toEqual(['KR_5', 'KR_4'])
+
+    const last = page1[page1.length - 1]
+    const page2 = repo.listMatchesPage(account.puuid, {
+      beforeCreation: last.gameCreation,
+      beforeMatchId: last.matchId,
+      limit: 2
+    })
+    expect(page2.map((m) => m.matchId)).toEqual(['KR_3', 'KR_2'])
+
+    const prev = page2[page2.length - 1]
+    const page3 = repo.listMatchesPage(account.puuid, {
+      beforeCreation: prev.gameCreation,
+      beforeMatchId: prev.matchId,
+      limit: 2
+    })
+    expect(page3.map((m) => m.matchId)).toEqual(['KR_1'])
+  })
+
+  it('listMatchesPage breaks ties on match_id when game_creation matches', () => {
+    store('KR_A', 500)
+    store('KR_B', 500)
+    const all = repo.listMatchesPage(account.puuid, { limit: 10 })
+    expect(all.map((m) => m.matchId)).toEqual(['KR_B', 'KR_A'])
+    const page = repo.listMatchesPage(account.puuid, {
+      beforeCreation: 500,
+      beforeMatchId: 'KR_B',
+      limit: 10
+    })
+    expect(page.map((m) => m.matchId)).toEqual(['KR_A'])
+  })
 })

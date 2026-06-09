@@ -45,8 +45,8 @@ export class RiotApiClient implements MatchDataSource, SummonerDataSource {
     }
   }
 
-  async listMatchIds(puuid: string, region: string, count: number): Promise<string[]> {
-    const url = `https://${region}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?count=${count}&queue=420`
+  async listMatchIds(puuid: string, region: string, count: number, start = 0): Promise<string[]> {
+    const url = `https://${region}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?start=${start}&count=${count}&queue=420`
     return (await riotFetch(url, this.apiKey)) as string[]
   }
 
