@@ -7,18 +7,53 @@ const PIN = (
   </svg>
 )
 
-interface EvidenceChipProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface EvidenceChipProps {
+  children?: React.ReactNode
   refId?: string
   kind?: 'data' | 'death' | 'objective'
   icon?: React.ReactNode
+  className?: string
+  style?: React.CSSProperties
+  /** Tooltip text shown on hover — use when the chip may truncate. */
+  title?: string
+  /** Truncate to a fixed width with an ellipsis (pair with `title`). */
+  truncate?: boolean
+  /** When provided, the chip is interactive (renders a button); otherwise it is a static label. */
+  onClick?: React.MouseEventHandler
 }
 
-export function EvidenceChip({ children, refId, kind = 'data', icon, className = '', ...rest }: EvidenceChipProps) {
-  const cls = ['ck-evidence', kind !== 'data' ? `ck-evidence--${kind}` : '', className].filter(Boolean).join(' ')
+export function EvidenceChip({
+  children, refId, kind = 'data', icon, className = '', style, title, truncate = false, onClick
+}: EvidenceChipProps) {
+  const interactive = !!onClick
+  const cls = [
+    'ck-evidence',
+    kind !== 'data' ? `ck-evidence--${kind}` : '',
+    interactive ? '' : 'ck-evidence--static',
+    truncate ? 'ck-evidence--truncate' : '',
+    className
+  ].filter(Boolean).join(' ')
+
+  // The pin icon implies a clickable location, so only show it when interactive
+  // (or when a caller passes its own icon).
+  const shownIcon = icon ?? (interactive ? PIN : null)
+  const inner = (
+    <>
+      {shownIcon && <span className="ck-evidence__icon">{shownIcon}</span>}
+      <span className="ck-evidence__text">{children || refId}</span>
+    </>
+  )
+
+  if (interactive) {
+    return (
+      <button type="button" className={cls} data-ref={refId} style={style} title={title} onClick={onClick}>
+        {inner}
+      </button>
+    )
+  }
   return (
-    <button type="button" className={cls} data-ref={refId} {...rest}>
-      <span className="ck-evidence__icon">{icon || PIN}</span>
-      {children || refId}
-    </button>
+    <span className={cls} data-ref={refId} style={style} title={title}>
+      {inner}
+    </span>
   )
 }

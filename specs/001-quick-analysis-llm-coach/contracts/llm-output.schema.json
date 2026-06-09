@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "submit_analysis",
+  "description": "Structured Quick Analysis result the coaching model MUST return via forced tool-use. The model only annotates pre-computed facts; it must not invent numbers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["insights", "noData"],
+  "properties": {
+    "noData": {
+      "type": "boolean",
+      "description": "true only when there are too few games to say anything useful; insights must then be empty."
+    },
+    "insights": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 4,
+      "description": "2-3 ideal, impact-ordered. Each is a diagnosed flaw + a concrete next-game action, never a restatement of a visible stat.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["leak", "headline", "body", "evidence", "confidence"],
+        "properties": {
+          "leak": {
+            "type": "string",
+            "enum": ["deaths", "farming", "lead_conversion", "champion_pool", "consistency", "tempo"]
+          },
+          "headline": {
+            "type": "string",
+            "description": "The flaw, blunt and short.",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "body": {
+            "type": "string",
+            "description": "Why it costs LP at this rank + the concrete next-game action.",
+            "minLength": 1,
+            "maxLength": 400
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Chip text echoing a number from the provided facts, e.g. 'avgKDA 3.1 · 38% WR'. Must not contain a figure not present in the input.",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "benchmarkBasis": {
+            "type": ["string", "null"],
+            "enum": ["champion_patch", "rank_general", "general", null],
+            "description": "Set when a rate benchmark is cited; null otherwise."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["established", "provisional"],
+            "description": "provisional when the pattern rests on fewer than 3 games."
+          }
+        }
+      }
+    }
+  }
+}

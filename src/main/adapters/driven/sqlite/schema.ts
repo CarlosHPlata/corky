@@ -86,5 +86,13 @@ export function runMigrations(db: Database.Database): void {
       actual_value        REAL,
       PRIMARY KEY (task_id, evaluating_match_id)
     );
+
+    -- Latest Quick Analysis per account, so it survives resync and app restart.
+    CREATE TABLE IF NOT EXISTS session_analyses (
+      puuid      TEXT PRIMARY KEY,
+      created_at INTEGER NOT NULL,
+      model      TEXT NOT NULL,
+      json       TEXT NOT NULL
+    );
   `)
 }

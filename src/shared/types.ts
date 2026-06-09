@@ -90,6 +90,47 @@ export interface TaskEvaluation {
   actualValue: number | null
 }
 
+/** Category of flaw a Quick Analysis insight diagnoses — drives the renderer icon/tone. */
+export type InsightLeak =
+  | 'deaths'
+  | 'farming'
+  | 'lead_conversion'
+  | 'champion_pool'
+  | 'consistency'
+  | 'tempo'
+
+/** What reference a cited benchmark was measured against (honest about its basis). */
+export type BenchmarkBasis = 'champion_patch' | 'rank_general' | 'general'
+
+/** One unit of session coaching — maps onto a Quick Analysis insight row. */
+export interface SessionInsight {
+  leak: InsightLeak
+  /** The flaw, blunt and short. */
+  headline: string
+  /** Why it costs LP at this rank + the concrete next-game action. */
+  body: string
+  /** Chip text drawn from computed signals, e.g. "avgKDA 3.1 · 38% WR". */
+  evidence: string
+  /** Reference basis when a benchmark is cited; null when none applies. */
+  benchmarkBasis: BenchmarkBasis | null
+  /** `provisional` when the pattern rests on fewer than 3 games. */
+  confidence: 'established' | 'provisional'
+}
+
+/** The full Quick Analysis result returned to the renderer (ephemeral, session-cached). */
+export interface SessionAnalysis {
+  /** 0–4 insights, target 2–3, impact-ordered. Empty when `noData`. */
+  insights: SessionInsight[]
+  /** true when there are too few games to analyze → renderer shows "needs games". */
+  noData: boolean
+  /** Overall benchmark basis actually used for this run (transparency). */
+  benchmarkBasisUsed: BenchmarkBasis
+  /** epoch ms, stamped in the main process. */
+  generatedAt: number
+  /** model id used (provenance). */
+  model: string
+}
+
 export interface IpcApi {
   syncMatches: (count: number) => Promise<void>
   getMatchList: () => Promise<MatchSummary[]>
@@ -98,4 +139,8 @@ export interface IpcApi {
   getLpHistory: () => Promise<LpSnapshot[]>
   analyzeMatch: (matchId: string) => Promise<void>
   getCoachReport: (matchId: string) => Promise<CoachReport | null>
+  /** Generate a fresh analysis and persist it as the account's latest. */
+  runSessionAnalysis: () => Promise<SessionAnalysis>
+  /** The last persisted analysis for the current account, or null if none yet. */
+  getSessionAnalysis: () => Promise<SessionAnalysis | null>
 }
