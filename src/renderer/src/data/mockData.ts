@@ -17,6 +17,8 @@ export interface MatchMock {
   a: number
   cs: number
   csmin: number
+  gold?: string
+  goldmin?: string
   dur: string
   queue: string
   when: string
@@ -25,8 +27,8 @@ export interface MatchMock {
 }
 
 export const MATCHES: MatchMock[] = [
-  { id: 'EUW1_001', champ: 'Ahri', role: 'Mid', win: false, k: 6, d: 7, a: 9, cs: 214, csmin: 6.9, dur: '31:24', queue: 'Ranked Solo', when: '14m ago', reason: 'Lost the mid-game — caught out before Baron, twice.', isNew: true },
-  { id: 'EUW1_002', champ: 'Ahri', role: 'Mid', win: true, k: 11, d: 3, a: 7, cs: 248, csmin: 8.1, dur: '28:50', queue: 'Ranked Solo', when: '2h ago', reason: 'Snowballed a lane lead into objectives. Clean close.' },
+  { id: 'EUW1_001', champ: 'Ahri', role: 'Mid', win: false, k: 6, d: 7, a: 9, cs: 214, csmin: 6.9, gold: '13.2k', goldmin: '420', dur: '31:24', queue: 'Ranked Solo', when: '14m ago', reason: 'Lost the mid-game — caught out before Baron, twice.', isNew: true },
+  { id: 'EUW1_002', champ: 'Ahri', role: 'Mid', win: true, k: 11, d: 3, a: 7, cs: 248, csmin: 8.1, gold: '14.8k', goldmin: '513', dur: '28:50', queue: 'Ranked Solo', when: '2h ago', reason: 'Snowballed a lane lead into objectives. Clean close.' },
   { id: 'EUW1_003', champ: 'Syndra', role: 'Mid', win: true, k: 8, d: 4, a: 12, cs: 232, csmin: 7.4, dur: '34:10', queue: 'Ranked Solo', when: '3h ago', reason: 'Even game, won the 30-minute teamfight.' },
   { id: 'EUW1_004', champ: 'Viktor', role: 'Mid', win: false, k: 3, d: 8, a: 5, cs: 198, csmin: 5.8, dur: '36:02', queue: 'Ranked Solo', when: 'Yesterday', reason: 'Fell behind in lane and never pathed to recover.' },
   { id: 'EUW1_005', champ: 'Ahri', role: 'Mid', win: true, k: 9, d: 2, a: 10, cs: 261, csmin: 8.4, dur: '30:18', queue: 'Ranked Solo', when: 'Yesterday', reason: 'Lane lead, grouped for both early drakes.' },
@@ -63,6 +65,22 @@ export interface DeathData {
   note: string
 }
 
+export interface RosterPlayer {
+  role: string
+  champ: string
+  you?: boolean
+  lane?: boolean
+}
+
+export type EventKind = 'teamfight' | 'objective' | 'death' | 'spike' | 'ace' | 'pick'
+
+export interface TimelineEvent {
+  t: number
+  kind: EventKind
+  label: string
+  detail?: string
+}
+
 export interface StatData {
   label: string
   value: string
@@ -79,12 +97,15 @@ export interface ReportMock {
   cohort: string
   headlineTag: string
   headlineTagIntent: 'win' | 'loss' | 'objective' | 'accent' | 'warn' | 'info' | 'neutral'
+  roster: { ally: RosterPlayer[]; enemy: RosterPlayer[] }
   sinceLast: FocusTaskData[]
   nextFocus: FocusTaskData[]
   stats: StatData[]
   goldCurve: number[]
   chartMarks: number[]
   chartFoot: { t: string; color?: string }[]
+  teamGold: number[]
+  timelineEvents: TimelineEvent[]
   deaths: DeathData[]
   turningPoints: TurningPointData[]
 }
@@ -99,6 +120,32 @@ export const REPORT_LOSS: ReportMock = {
   cohort: 'Measured against your 6 winning Ahri games this patch.',
   headlineTag: 'Baron 24:40',
   headlineTagIntent: 'objective',
+  roster: {
+    ally: [
+      { role: 'Top', champ: 'Garen' },
+      { role: 'Jungle', champ: 'Lee Sin' },
+      { role: 'Mid', champ: 'Ahri', you: true },
+      { role: 'Bot', champ: 'Jinx' },
+      { role: 'Support', champ: 'Thresh' },
+    ],
+    enemy: [
+      { role: 'Top', champ: 'Sett' },
+      { role: 'Jungle', champ: 'Vi' },
+      { role: 'Mid', champ: 'Zed', lane: true },
+      { role: 'Bot', champ: 'Caitlyn' },
+      { role: 'Support', champ: 'Lux' },
+    ],
+  },
+  teamGold: [0, 0.3, 0.6, 1.0, 1.3, 1.6, 2.0, 2.3, 2.5, 2.2, 2.7, 3.1, 2.5, 1.4, 0.6, -0.5, -1.3, -2.0, -2.7, -2.1, -3.3, -4.0, -3.1, -4.6, -5.3, -4.5, -5.9, -6.5, -7.1, -6.3, -7.6, -8.2],
+  timelineEvents: [
+    { t: 6.5, kind: 'objective', label: 'First drake', detail: 'Your team took Cloud drake uncontested.' },
+    { t: 9.0, kind: 'teamfight', label: 'Skirmish won', detail: '2-for-1 in the mid-river. Lead out to +2.5k.' },
+    { t: 16.5, kind: 'objective', label: 'Rift Herald', detail: 'Herald into two mid plates. Peak lead +3.1k.' },
+    { t: 22.2, kind: 'death', label: 'Caught out', detail: 'You died alone in the river — the lead starts slipping.' },
+    { t: 24.7, kind: 'objective', label: 'Baron lost', detail: 'Team aced contesting Baron 4v5. −2.4k swing.' },
+    { t: 27.6, kind: 'death', label: 'Caught out', detail: 'Facechecked the Baron pit solo before the fight.' },
+    { t: 30.5, kind: 'teamfight', label: 'Lost teamfight', detail: 'Wiped at their base. Game over.' },
+  ],
   sinceLast: [
     { result: 'improved', actual: '74', description: 'Hit 70 CS by 10 minutes.', metric: 'cs_at_10', comparator: '>=', target: '70', scope: 'role' },
     { result: 'regressed', actual: '2', description: "Don’t die alone in the river.", metric: 'solo_river_deaths', comparator: '==', target: '0', scope: 'universal' },
@@ -141,6 +188,32 @@ export const REPORT_WIN: ReportMock = {
   cohort: 'Measured against your 6 winning Ahri games this patch.',
   headlineTag: 'Closed 28:50',
   headlineTagIntent: 'win',
+  roster: {
+    ally: [
+      { role: 'Top', champ: 'Ornn' },
+      { role: 'Jungle', champ: 'Vi' },
+      { role: 'Mid', champ: 'Ahri', you: true },
+      { role: 'Bot', champ: "Kai'Sa" },
+      { role: 'Support', champ: 'Nautilus' },
+    ],
+    enemy: [
+      { role: 'Top', champ: 'Camille' },
+      { role: 'Jungle', champ: 'Graves' },
+      { role: 'Mid', champ: 'Syndra', lane: true },
+      { role: 'Bot', champ: 'Jhin' },
+      { role: 'Support', champ: 'Leona' },
+    ],
+  },
+  teamGold: [0, 0.2, 0.5, 0.9, 1.3, 1.8, 2.3, 2.0, 2.6, 3.4, 3.0, 3.6, 4.1, 4.5, 4.2, 4.8, 5.3, 5.0, 5.6, 6.2, 5.8, 6.5, 7.0, 6.6, 8.2, 8.8, 9.4, 9.0, 9.6],
+  timelineEvents: [
+    { t: 9.2, kind: 'spike', label: 'Solo kill', detail: 'Charm → ult all-in on the enemy mid. Two-level lead.' },
+    { t: 11.0, kind: 'objective', label: 'First drake', detail: 'Pathed bot off the reset for Infernal.' },
+    { t: 12.3, kind: 'death', label: 'Fair trade', detail: 'Traded a kill on a clean all-in. Fine.' },
+    { t: 18.0, kind: 'teamfight', label: 'Teamfight won', detail: '4-for-1 mid. Lead out to +5k.' },
+    { t: 24.1, kind: 'ace', label: 'Ace at drake', detail: '3-man Charm into a clean ace. +2.4k swing.' },
+    { t: 26.0, kind: 'objective', label: 'Baron', detail: 'Free Baron off the ace.' },
+    { t: 28.5, kind: 'teamfight', label: 'Closing push', detail: 'Baron-empowered mid push ends it.' },
+  ],
   sinceLast: [
     { result: 'improved', actual: '78', description: 'Hit 70 CS by 10 minutes.', metric: 'cs_at_10', comparator: '>=', target: '70', scope: 'role' },
     { result: 'held', actual: '0', description: "Don’t die alone in the river.", metric: 'solo_river_deaths', comparator: '==', target: '0', scope: 'universal' },
@@ -169,6 +242,45 @@ export const REPORT_WIN: ReportMock = {
   turningPoints: [
     { time: '9:10', swing: '+1.3k swing', dir: 'up', you: { x: 48, y: 46 }, event: { x: 52, y: 44 }, what: 'Solo-killed the enemy mid on a Charm → ult all-in, then reset on the level lead.', better: 'Exactly right — you recalled, bought, and used the tempo to path bot for first drake.' },
     { time: '24:05', swing: '+2.4k swing', dir: 'up', you: { x: 64, y: 66 }, event: { x: 66, y: 64 }, objective: { x: 72, y: 70 }, what: 'Your team forced a 5v5 at the second drake and aced — you opened with a 3-man Charm.', better: 'Good call. The only note: you could have flashed out after the ult to survive the trade.' },
+  ],
+}
+
+export interface LpPoint {
+  lp: number
+  baseline?: boolean
+  label?: string
+  matchId?: string
+  champ?: string
+  win?: boolean
+  delta?: number
+  when?: string
+}
+
+export interface LpHistoryData {
+  tier: string
+  div: string
+  lp: number
+  floorLp: number
+  ceilLp: number
+  demoteLabel: string
+  promoLabel: string
+  points: LpPoint[]
+}
+
+export const LP_HISTORY: LpHistoryData = {
+  tier: 'Platinum', div: 'II', lp: 64,
+  floorLp: 0, ceilLp: 100,
+  demoteLabel: 'Platinum III', promoLabel: 'Platinum I',
+  points: [
+    { lp: 57, baseline: true, label: 'Session start' },
+    { matchId: 'EUW1_008', champ: 'Ahri',    win: false, lp: 38, delta: -19, when: '2d ago' },
+    { matchId: 'EUW1_007', champ: 'Syndra',  win: true,  lp: 59, delta: 21,  when: '2d ago' },
+    { matchId: 'EUW1_006', champ: 'Orianna', win: false, lp: 41, delta: -18, when: 'Yesterday' },
+    { matchId: 'EUW1_005', champ: 'Ahri',    win: true,  lp: 63, delta: 22,  when: 'Yesterday' },
+    { matchId: 'EUW1_004', champ: 'Viktor',  win: false, lp: 45, delta: -18, when: 'Yesterday' },
+    { matchId: 'EUW1_003', champ: 'Syndra',  win: true,  lp: 65, delta: 20,  when: '3h ago' },
+    { matchId: 'EUW1_002', champ: 'Ahri',    win: true,  lp: 84, delta: 19,  when: '2h ago' },
+    { matchId: 'EUW1_001', champ: 'Ahri',    win: false, lp: 64, delta: -20, when: '14m ago' },
   ],
 }
 

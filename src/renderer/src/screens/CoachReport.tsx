@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { VerdictCard } from '../components/coaching/VerdictCard'
 import { FocusTask } from '../components/coaching/FocusTask'
 import { TurningPoint } from '../components/coaching/TurningPoint'
+import { MatchTimeline } from '../components/coaching/MatchTimeline'
 import { Badge } from '../components/core/Badge'
 import { Card } from '../components/core/Card'
 import { StatBlock } from '../components/core/StatBlock'
@@ -9,7 +10,14 @@ import { Button } from '../components/core/Button'
 import { Avatar } from '../components/core/Avatar'
 import { ChampAvatar } from '../components/ChampAvatar'
 import { Icon } from '../components/Icon'
-import { REPORT_LOSS, REPORT_WIN, type MatchMock, type ReportMock, type DeathData } from '../data/mockData'
+import {
+  REPORT_LOSS, REPORT_WIN,
+  type MatchMock, type ReportMock, type DeathData, type RosterPlayer,
+} from '../data/mockData'
+
+const ROLE_ABBR: Record<string, string> = {
+  Top: 'TOP', Jungle: 'JNG', Mid: 'MID', Bot: 'BOT', Support: 'SUP',
+}
 
 function SectionLabel({ icon, children, count }: { icon?: string; children: React.ReactNode; count?: string }) {
   return (
@@ -18,6 +26,86 @@ function SectionLabel({ icon, children, count }: { icon?: string; children: Reac
       <span className="eyebrow" style={{ fontSize: 12 }}>{children}</span>
       {count != null && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-faint)' }}>{count}</span>}
     </div>
+  )
+}
+
+function Scoreline({ m }: { m: MatchMock }) {
+  const kda = ((m.k + m.a) / Math.max(1, m.d)).toFixed(2)
+  const stats = [
+    { label: 'KDA', value: kda, caption: `${m.k} / ${m.d} / ${m.a}` },
+    { label: 'CS', value: String(m.cs), caption: `${m.role.toLowerCase()} farm` },
+    { label: 'CS / min', value: String(m.csmin), caption: 'minions + jungle' },
+    ...(m.gold ? [{ label: 'Gold', value: m.gold, caption: 'earned total' }] : []),
+    ...(m.goldmin ? [{ label: 'Gold / min', value: m.goldmin, caption: 'economy rate' }] : []),
+  ]
+  return (
+    <Card padding={0}>
+      <div style={{ display: 'flex', alignItems: 'stretch', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '16px 20px', minWidth: 196 }}>
+          <ChampAvatar name={m.champ} size="lg" shape="rounded" ring={m.win ? 'win' : 'loss'} />
+          <div style={{ minWidth: 0 }}>
+            <div className="eyebrow" style={{ fontSize: 11, color: m.win ? 'var(--win)' : 'var(--loss)', marginBottom: 3 }}>
+              {m.role} · {m.win ? 'Victory' : 'Defeat'}
+            </div>
+            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 21, color: 'var(--text-primary)', lineHeight: 1.05 }}>
+              {m.champ}
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
+              {m.dur} · {m.queue}
+            </div>
+          </div>
+        </div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 22, padding: '16px 22px', borderLeft: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
+          {stats.map((s, i) => <StatBlock key={i} size="sm" {...s} />)}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function Matchup({ roster }: { roster: ReportMock['roster'] }) {
+  const rows = roster.ally.map((a, i) => ({ a, e: roster.enemy[i] }))
+  return (
+    <Card padding={16}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 56px 1fr', alignItems: 'center', gap: '0 12px', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--data-ally)', flex: 'none' }} />
+          <span className="eyebrow" style={{ fontSize: 11, color: 'var(--blue-400)' }}>Your team</span>
+        </div>
+        <span />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, justifyContent: 'flex-end' }}>
+          <span className="eyebrow" style={{ fontSize: 11, color: 'var(--red-400)' }}>Enemy</span>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--data-enemy)', flex: 'none' }} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {rows.map(({ a, e }: { a: RosterPlayer; e: RosterPlayer }, i: number) => (
+          <div key={i} style={{
+            display: 'grid', gridTemplateColumns: '1fr 56px 1fr', alignItems: 'center', gap: '0 12px',
+            padding: '6px 8px', borderRadius: 'var(--radius-md)',
+            background: a.you ? 'rgba(242,179,61,0.07)' : 'transparent',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <ChampAvatar name={a.champ} size="sm" shape="rounded" ring={a.you ? 'accent' : 'var(--data-ally)'} />
+              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {a.champ}
+                {a.you && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--gold-400)', marginLeft: 7, letterSpacing: '0.04em' }}>YOU</span>}
+              </span>
+            </div>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: '0.08em', textAlign: 'center' }}>
+              {ROLE_ABBR[a.role] ?? a.role.toUpperCase()}
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end' }}>
+              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14, color: e.lane ? 'var(--data-enemy)' : 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right' }}>
+                {e.lane && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--data-enemy)', marginRight: 7, letterSpacing: '0.04em' }}>LANE</span>}
+                {e.champ}
+              </span>
+              <ChampAvatar name={e.champ} size="sm" shape="rounded" ring="var(--data-enemy)" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   )
 }
 
@@ -167,6 +255,16 @@ function ReportView({ r, m }: { r: ReportMock; m: MatchMock }) {
       </VerdictCard>
 
       <section>
+        <SectionLabel icon="bar-chart-3">This game</SectionLabel>
+        <Scoreline m={m} />
+      </section>
+
+      <section>
+        <SectionLabel icon="swords">Matchup</SectionLabel>
+        <Matchup roster={r.roster} />
+      </section>
+
+      <section>
         <SectionLabel icon="history">Since last game</SectionLabel>
         <Card padding={16}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -185,6 +283,9 @@ function ReportView({ r, m }: { r: ReportMock; m: MatchMock }) {
 
       <section>
         <SectionLabel icon="target">Evidence</SectionLabel>
+        <div style={{ marginBottom: 14 }}>
+          <MatchTimeline duration={m.dur} curve={r.teamGold} events={r.timelineEvents} />
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 14, marginBottom: 14 }}>
           <GoldChart curve={r.goldCurve} marks={r.chartMarks} foot={r.chartFoot} />
           <Card padding={16}>

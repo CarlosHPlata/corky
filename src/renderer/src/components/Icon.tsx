@@ -21,6 +21,7 @@ const PATHS: Record<string, string> = {
   eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
   coins: '<path d="M13.744 17.736a6 6 0 1 1-7.48-7.48"/><path d="M15 6h1v4"/><path d="m6.134 14.768.866-.5 2 3.464"/><circle cx="16" cy="8" r="6"/>',
   'list-filter': '<path d="M2 5h20"/><path d="M6 12h12"/><path d="M9 19h6"/>',
+  'bar-chart-3': '<path d="M3 3v18h18"/><path d="M7 16v-5"/><path d="M11 16V5"/><path d="M15 16v-8"/>',
 }
 
 interface IconProps {
