@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { SessionInsight, InsightLeak, BenchmarkBasis } from '@shared/types'
-import type { SessionCoachingModel, SessionAnalysisOutput } from '../../../application/ports/SessionCoachingModel'
+import type { SessionCoachingModel, SessionAnalysisOutput, PlayerContext } from '../../../application/ports/SessionCoachingModel'
 import type { SessionFeatures } from '../../../domain/sessionFeatures'
 import { buildSessionPrompt, SUBMIT_TOOL } from './sessionPrompt'
 
@@ -69,8 +69,12 @@ export class AnthropicSessionCoachingModel implements SessionCoachingModel {
     return new AnthropicSessionCoachingModel(create)
   }
 
-  async analyzeSession(features: SessionFeatures, model: string): Promise<SessionAnalysisOutput> {
-    const { system, user } = buildSessionPrompt(features)
+  async analyzeSession(
+    features: SessionFeatures,
+    model: string,
+    playerContext?: PlayerContext
+  ): Promise<SessionAnalysisOutput> {
+    const { system, user } = buildSessionPrompt(features, playerContext)
     const message = await this.createMessage({
       model,
       max_tokens: 1500,

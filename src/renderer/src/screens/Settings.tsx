@@ -21,7 +21,7 @@ const fieldStyle: React.CSSProperties = {
 
 export function Settings() {
   return (
-    <div className="ck-fade" style={{ padding: '22px 24px', maxWidth: 680, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
+    <div className="ck-fade" style={{ padding: '22px 18px', maxWidth: 680, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
       <Card title="Account" eyebrow="Riot ID" padding={18}>
         <Row label="Riot ID"><span style={fieldStyle}>{SUMMONER.name}#{SUMMONER.tag}</span></Row>
         <Row label="Region"><span style={fieldStyle}>{SUMMONER.region}</span></Row>

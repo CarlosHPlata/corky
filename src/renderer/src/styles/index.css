@@ -199,7 +199,7 @@
   /* Layout */
   --sidebar-w:   248px;
   --topbar-h:    56px;
-  --content-max: 1120px;
+  --content-max: 1440px;
 }
 
 /* ---------- Base reset ------------------------------------ */
@@ -334,6 +334,17 @@ code, kbd, samp, pre { font-family: var(--font-mono); }
 
 .ck-fade { animation: ck-fade var(--dur-base) var(--ease-out); }
 @keyframes ck-fade { from { transform: translateY(8px); } to { transform: none; } }
+
+/* ---------- Field (text input / textarea) ----------------- */
+.ck-field {
+  display: block; width: 100%; box-sizing: border-box;
+  padding: 10px 12px; border-radius: var(--radius-md);
+  background: var(--bg-input); border: 1px solid var(--border-default);
+  color: var(--text-primary); font-family: var(--font-sans); font-size: 14px;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.ck-field::placeholder { color: var(--text-faint); }
+.ck-field:focus-visible { outline: none; border-color: var(--gold-500); box-shadow: var(--focus-ring); }
 
 /* ---------- Button ---------------------------------------- */
 .ck-btn {

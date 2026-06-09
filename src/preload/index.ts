@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
-  IpcApi, MatchSummary, SummonerProfile, LpSnapshot, CoachReport, SessionAnalysis
+  IpcApi, MatchSummary, SummonerProfile, LpSnapshot, CoachReport, SessionAnalysis,
+  SessionGoal, SessionGoalInput
 } from '../shared/types'
 
 const api: IpcApi = {
@@ -13,7 +14,10 @@ const api: IpcApi = {
   getCoachReport: (matchId: string): Promise<CoachReport | null> =>
     ipcRenderer.invoke('report:get', matchId),
   runSessionAnalysis: (): Promise<SessionAnalysis> => ipcRenderer.invoke('analysis:session:run'),
-  getSessionAnalysis: (): Promise<SessionAnalysis | null> => ipcRenderer.invoke('analysis:session:get')
+  getSessionAnalysis: (): Promise<SessionAnalysis | null> => ipcRenderer.invoke('analysis:session:get'),
+  getSessionGoal: (): Promise<SessionGoal | null> => ipcRenderer.invoke('goal:get'),
+  saveSessionGoal: (input: SessionGoalInput): Promise<SessionGoal> =>
+    ipcRenderer.invoke('goal:save', input)
 }
 
 contextBridge.exposeInMainWorld('api', api)

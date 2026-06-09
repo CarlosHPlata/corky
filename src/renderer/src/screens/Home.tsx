@@ -7,6 +7,7 @@ import { ProgressBar } from '../components/core/ProgressBar'
 import { EvidenceChip } from '../components/coaching/EvidenceChip'
 import { FocusTask } from '../components/coaching/FocusTask'
 import { ChampAvatar } from '../components/ChampAvatar'
+import { GoalNotes } from '../components/GoalNotes'
 import { Icon } from '../components/Icon'
 import { MATCHES, REPORT_LOSS, REPORT_WIN, type MatchMock } from '../data/mockData'
 import type { AppData } from '../data/useAppData'
@@ -49,10 +50,10 @@ function wrColor(wr: number) {
   return wr >= 60 ? 'var(--win)' : wr >= 45 ? 'var(--warn)' : 'var(--loss)'
 }
 
-function SectionLabel({ icon, children, right }: { icon?: string; children: React.ReactNode; right?: React.ReactNode }) {
+function SectionLabel({ icon, children, right, tone = 'var(--gold-400)' }: { icon?: string; children: React.ReactNode; right?: React.ReactNode; tone?: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 9, margin: '0 0 12px' }}>
-      {icon && <Icon name={icon} size={16} style={{ color: 'var(--gold-400)' }} />}
+      {icon && <Icon name={icon} size={16} style={{ color: tone }} />}
       <span className="eyebrow" style={{ fontSize: 12 }}>{children}</span>
       {right && <span style={{ marginLeft: 'auto' }}>{right}</span>}
     </div>
@@ -138,15 +139,15 @@ function NextFocus({ onOpen }: { onOpen: (m: MatchMock) => void }) {
   const report = latest.win ? REPORT_WIN : REPORT_LOSS
   const tasks = report.nextFocus
   return (
-    <Card accent="accent" padding={18}>
+    <Card accent="objective" padding={18}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 13, marginBottom: 14 }}>
-        <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 'var(--radius-md)', display: 'grid', placeItems: 'center', background: 'var(--accent-soft)' }}>
-          <Icon name="crosshair" size={20} style={{ color: 'var(--gold-400)' }} />
+        <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 'var(--radius-md)', display: 'grid', placeItems: 'center', background: 'var(--objective-soft)' }}>
+          <Icon name="crosshair" size={20} style={{ color: 'var(--violet-400)' }} />
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18, color: 'var(--text-primary)', lineHeight: 1.15 }}>Next-game focus</span>
-            <Badge intent="accent" dot>{tasks.length} tasks</Badge>
+            <Badge intent="objective" dot>{tasks.length} tasks</Badge>
           </div>
           <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.55, margin: '4px 0 0' }}>
             Set from your last game —{' '}
@@ -427,7 +428,7 @@ export function Home({ data, onOpen, onNav }: {
 
   if (!profile && matches.length === 0) {
     return (
-      <div style={{ padding: '22px 24px 60px', maxWidth: 'var(--content-max)', margin: '0 auto' }}>
+      <div style={{ padding: '22px 18px 60px', maxWidth: 'var(--content-max)', margin: '0 auto' }}>
         <Card padding={28}>
           <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
             <span style={{ width: 48, height: 48, borderRadius: 'var(--radius-md)', display: 'grid', placeItems: 'center', background: 'var(--accent-soft)' }}>
@@ -449,7 +450,7 @@ export function Home({ data, onOpen, onNav }: {
   }
 
   return (
-    <div style={{ padding: '22px 24px 60px', maxWidth: 'var(--content-max)', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 26 }}>
+    <div style={{ padding: '22px 18px 60px', maxWidth: 'var(--content-max)', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 26 }}>
       {error && (
         <Card accent="loss" padding={14}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--loss)' }}>
@@ -459,25 +460,14 @@ export function Home({ data, onOpen, onNav }: {
         </Card>
       )}
 
+      {/* 1 — Overview */}
       {profile && (
         <section>
           <Hero profile={profile} matches={matches} net={net} onNav={onNav} />
         </section>
       )}
 
-      <section>
-        <NextFocus onOpen={onOpen} />
-      </section>
-
-      <section>
-        <QuickAnalysis />
-      </section>
-
-      <section>
-        <SectionLabel icon="trending-up">LP &amp; rank · this session</SectionLabel>
-        <LpRankChart history={lpHistory} rank={profile?.soloRank ?? null} />
-      </section>
-
+      {/* 2 — Champion pool, right below the overview */}
       {pool.length > 0 && (
         <section>
           <SectionLabel
@@ -488,6 +478,24 @@ export function Home({ data, onOpen, onNav }: {
           <ChampPool pool={pool} />
         </section>
       )}
+
+      {/* 3 — LP & rank trajectory */}
+      <section>
+        <SectionLabel icon="trending-up" tone="var(--blue-400)">LP &amp; rank · this session</SectionLabel>
+        <LpRankChart history={lpHistory} rank={profile?.soloRank ?? null} />
+      </section>
+
+      {/* 4 — Corky power tools: session goal, then focus + analysis side by side */}
+      <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <SectionLabel icon="sparkles" tone="var(--violet-400)">Corky · power tools</SectionLabel>
+
+        <GoalNotes />
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, alignItems: 'start' }}>
+          <NextFocus onOpen={onOpen} />
+          <QuickAnalysis />
+        </div>
+      </section>
     </div>
   )
 }

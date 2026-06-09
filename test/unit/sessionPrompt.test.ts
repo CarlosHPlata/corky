@@ -49,3 +49,30 @@ describe('buildSessionPrompt', () => {
     expect(SUBMIT_TOOL.input_schema.required).toContain('insights')
   })
 })
+
+describe('buildSessionPrompt with player intent (US2)', () => {
+  it('includes the goal + notes as stated intent, flagged as not a computed fact', () => {
+    const { user } = buildSessionPrompt(features, {
+      goal: 'Convert one 20-minute lead into a closed game.',
+      notes: 'Stop forcing river plays when ahead.\nWard before objectives.'
+    })
+    expect(user).toContain('Convert one 20-minute lead into a closed game.')
+    expect(user).toContain('Stop forcing river plays when ahead.')
+    expect(user).toMatch(/stated intent|their own words|NOT a computed fact/i)
+    // The guardrail: never echo the goal as evidence, never invent figures to fit it.
+    expect(user).toMatch(/evidence/i)
+  })
+
+  it('omits the intent block entirely when no context is given (byte-for-byte today)', () => {
+    const without = buildSessionPrompt(features).user
+    const undefinedCtx = buildSessionPrompt(features, undefined).user
+    expect(undefinedCtx).toBe(without)
+    expect(without).not.toMatch(/stated intent/i)
+    expect(without).not.toMatch(/^\s*Goal:/m)
+  })
+
+  it('treats empty goal + notes as no intent (no block)', () => {
+    const empty = buildSessionPrompt(features, { goal: '', notes: '' }).user
+    expect(empty).toBe(buildSessionPrompt(features).user)
+  })
+})

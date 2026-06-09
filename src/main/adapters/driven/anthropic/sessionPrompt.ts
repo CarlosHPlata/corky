@@ -1,4 +1,5 @@
 import type { SessionFeatures, PoolEntry, GameLine } from '../../../domain/sessionFeatures'
+import type { PlayerContext } from '../../../application/ports/SessionCoachingModel'
 
 /**
  * Forced tool the model must call. input_schema mirrors
@@ -84,10 +85,38 @@ function gameLine(g: GameLine): string {
 }
 
 /**
+ * The player's own goal/notes, rendered as a labelled intent block — only when
+ * non-empty. Explicitly framed as intent (not a computed fact) with guardrails
+ * so the model weaves it in without citing it as evidence or inventing figures.
+ */
+function intentBlock(ctx?: PlayerContext): string {
+  if (!ctx) return ''
+  const goal = ctx.goal.trim()
+  const notes = ctx.notes.trim()
+  if (!goal && !notes) return ''
+  const noteLines = notes
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => `    - ${s}`)
+    .join('\n')
+  const goalLine = goal ? `  Goal: ${goal}` : '  Goal: (none set)'
+  const notesPart = noteLines ? `\n  Notes:\n${noteLines}` : ''
+  return `
+
+The player has set their own goal & notes for this session — their stated intent, in their own words (this is NOT a computed fact):
+${goalLine}${notesPart}
+Treat this as the player's intent. Where the numbers above support it, speak to it directly and make the read about what they're working on. Do NOT put this text in an "evidence" chip, and do NOT invent any figure to make a leak fit the goal. If the data can't speak to their goal, say so plainly.`
+}
+
+/**
  * Serialize the computed facts into a labeled prompt. The model reasons over
  * these numbers only; it must not introduce figures of its own.
  */
-export function buildSessionPrompt(f: SessionFeatures): { system: string; user: string } {
+export function buildSessionPrompt(
+  f: SessionFeatures,
+  playerContext?: PlayerContext
+): { system: string; user: string } {
   const rank = f.rank ? `${f.rank.tier} ${f.rank.division} ${f.rank.leaguePoints} LP` : 'Unranked/unknown'
   const lp =
     f.lp.netSession == null
@@ -104,7 +133,7 @@ Session LP: ${lp}
 Champion pool (${f.poolShape.championCount} champs, top champ is ${pct(f.poolShape.topChampShare)} of games, win-rate spread ${pct(f.poolShape.winRateSpread)}):
 ${f.pool.map(poolLine).join('\n')}
 Recent games (most recent first):
-${f.games.map(gameLine).join('\n')}
+${f.games.map(gameLine).join('\n')}${intentBlock(playerContext)}
 
 Now call submit_analysis with the 2-3 highest-impact coaching insights for this player.`
 

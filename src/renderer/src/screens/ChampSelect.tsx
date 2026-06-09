@@ -50,7 +50,7 @@ function InfoCard({ icon, title, children, accent }: { icon: string; title: stri
 export function ChampSelect() {
   const c = CHAMP_SELECT
   return (
-    <div style={{ padding: '22px 24px 50px', maxWidth: 'var(--content-max)', margin: '0 auto' }}>
+    <div style={{ padding: '22px 18px 50px', maxWidth: 'var(--content-max)', margin: '0 auto' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 20, alignItems: 'start', marginBottom: 24 }}>
         <TeamColumn players={c.ally} side="ally" />
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, paddingTop: 26 }}>

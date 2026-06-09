@@ -94,5 +94,14 @@ export function runMigrations(db: Database.Database): void {
       model      TEXT NOT NULL,
       json       TEXT NOT NULL
     );
+
+    -- The player's session goal + notes. Single global row (single-user app);
+    -- available before any account is synced. Fed to the coach as stated intent.
+    CREATE TABLE IF NOT EXISTS session_goal (
+      id         INTEGER PRIMARY KEY CHECK (id = 1),
+      goal       TEXT NOT NULL DEFAULT '',
+      notes      TEXT NOT NULL DEFAULT '',
+      updated_at INTEGER
+    );
   `)
 }

@@ -4,6 +4,7 @@ import { SqliteMatchRepository } from '../adapters/driven/sqlite/SqliteMatchRepo
 import { SqliteSummonerRepository } from '../adapters/driven/sqlite/SqliteSummonerRepository'
 import { SqliteReportRepository } from '../adapters/driven/sqlite/SqliteReportRepository'
 import { SqliteSessionAnalysisRepository } from '../adapters/driven/sqlite/SqliteSessionAnalysisRepository'
+import { SqliteSessionGoalRepository } from '../adapters/driven/sqlite/SqliteSessionGoalRepository'
 import { RiotApiClient } from '../adapters/driven/riot/RiotApiClient'
 import { AnthropicCoachingModel } from '../adapters/driven/anthropic/AnthropicCoachingModel'
 import { AnthropicSessionCoachingModel } from '../adapters/driven/anthropic/AnthropicSessionCoachingModel'
@@ -17,6 +18,8 @@ import { GetLpHistory } from '../application/queries/GetLpHistory'
 import { GetCoachReport } from '../application/queries/GetCoachReport'
 import { GetSessionAnalysis } from '../application/queries/GetSessionAnalysis'
 import { AnalyzeSession } from '../application/commands/AnalyzeSession'
+import { GetSessionGoal } from '../application/queries/GetSessionGoal'
+import { SaveSessionGoal } from '../application/commands/SaveSessionGoal'
 
 export function buildContainer() {
   const db = getDatabase()
@@ -25,6 +28,7 @@ export function buildContainer() {
   const summonerRepo = new SqliteSummonerRepository(db)
   const reportRepo = new SqliteReportRepository(db)
   const sessionAnalysisRepo = new SqliteSessionAnalysisRepository(db)
+  const sessionGoalRepo = new SqliteSessionGoalRepository(db)
   const riotClient = new RiotApiClient(config.riotApiKey)
   const coachingModel = new AnthropicCoachingModel(config.anthropicApiKey)
   const sessionCoachingModel = AnthropicSessionCoachingModel.fromApiKey(config.anthropicApiKey)
@@ -58,15 +62,19 @@ export function buildContainer() {
     sessionAnalysisRepo,
     sessionCoachingModel,
     config.anthropicModel,
-    benchmarkSource
+    benchmarkSource,
+    sessionGoalRepo
   )
   const getSessionAnalysis = new GetSessionAnalysis(matchRepo, sessionAnalysisRepo)
+  const getSessionGoal = new GetSessionGoal(sessionGoalRepo)
+  const saveSessionGoal = new SaveSessionGoal(sessionGoalRepo)
 
   return {
     matchRepo,
     summonerRepo,
     reportRepo,
     sessionAnalysisRepo,
+    sessionGoalRepo,
     coachingModel,
     sessionCoachingModel,
     opggClient,
@@ -78,6 +86,8 @@ export function buildContainer() {
     getLpHistory,
     getCoachReport,
     analyzeSession,
-    getSessionAnalysis
+    getSessionAnalysis,
+    getSessionGoal,
+    saveSessionGoal
   }
 }

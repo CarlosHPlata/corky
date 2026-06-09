@@ -48,7 +48,7 @@ function MatchRow({ m, onOpen }: { m: MatchMock; onOpen: (m: MatchMock) => void 
 export function MatchHistory({ onOpen }: { onOpen: (m: MatchMock) => void }) {
   const wins = MATCHES.filter(m => m.win).length
   return (
-    <div style={{ padding: '22px 24px', maxWidth: 'var(--content-max)', margin: '0 auto' }}>
+    <div style={{ padding: '22px 18px', maxWidth: 'var(--content-max)', margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <span className="eyebrow">Last {MATCHES.length} games</span>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>

@@ -13,7 +13,7 @@ const TREND_STATS = [
 
 export function Trends() {
   return (
-    <div className="ck-fade" style={{ padding: '22px 24px', maxWidth: 'var(--content-max)', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
+    <div className="ck-fade" style={{ padding: '22px 18px', maxWidth: 'var(--content-max)', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
       <Card accent="loss" padding={18}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
           <Icon name="trending-down" size={22} style={{ color: 'var(--loss)', flex: 'none', marginTop: 2 }} />
