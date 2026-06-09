@@ -1,7 +1,7 @@
 import React from 'react'
 import { Card } from '../components/core/Card'
 import { Badge } from '../components/core/Badge'
-import { Avatar } from '../components/core/Avatar'
+import { ChampAvatar } from '../components/ChampAvatar'
 import { Icon } from '../components/Icon'
 import { CHAMP_SELECT } from '../data/mockData'
 
@@ -22,7 +22,7 @@ function TeamColumn({ players, side }: { players: typeof CHAMP_SELECT.ally; side
           border: `1px solid ${p.you ? 'rgba(242,179,61,0.35)' : 'var(--border-subtle)'}`,
           flexDirection: ally ? 'row' : 'row-reverse', textAlign: ally ? 'left' : 'right',
         }}>
-          <Avatar name={p.champ} size="sm" shape="rounded" ring={p.you ? 'accent' : (ally ? 'info' : 'loss')} />
+          <ChampAvatar name={p.champ} size="sm" shape="rounded" ring={p.you ? 'accent' : (ally ? 'info' : 'loss')} />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 13.5, color: 'var(--text-primary)' }}>
               {p.champ}{p.you && <span style={{ color: 'var(--gold-400)', fontSize: 11, marginLeft: 6 }}>You</span>}
@@ -75,7 +75,7 @@ export function ChampSelect() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
             {c.threats.map((t, i) => (
               <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                <Avatar name={t.champ} size="sm" shape="rounded" ring="loss" />
+                <ChampAvatar name={t.champ} size="sm" shape="rounded" ring="loss" />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{t.champ}</div>
                   <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.45 }}>{t.text}</div>

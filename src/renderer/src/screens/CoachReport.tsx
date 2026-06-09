@@ -7,6 +7,7 @@ import { Card } from '../components/core/Card'
 import { StatBlock } from '../components/core/StatBlock'
 import { Button } from '../components/core/Button'
 import { Avatar } from '../components/core/Avatar'
+import { ChampAvatar } from '../components/ChampAvatar'
 import { Icon } from '../components/Icon'
 import { REPORT_LOSS, REPORT_WIN, type MatchMock, type ReportMock, type DeathData } from '../data/mockData'
 
@@ -132,7 +133,7 @@ function AnalyzePanel({ m, onDone }: { m: MatchMock; onDone: () => void }) {
   }
   return (
     <div style={{ maxWidth: 560, margin: '40px auto', textAlign: 'center', padding: '0 24px' }}>
-      <Avatar name={m.champ} size="lg" shape="rounded" ring={m.win ? 'win' : 'loss'} style={{ margin: '0 auto 16px', display: 'block' }} />
+      <ChampAvatar name={m.champ} size="lg" shape="rounded" ring={m.win ? 'win' : 'loss'} style={{ margin: '0 auto 16px', display: 'block' }} />
       <h2 style={{ fontSize: 26, marginBottom: 8 }}>{m.champ} · {m.win ? 'Win' : 'Loss'} · {m.dur}</h2>
       <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 22, lineHeight: 1.6 }}>
         This game hasn't been analysed yet. Corky will read the match timeline, compute the features, and explain

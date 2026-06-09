@@ -1,5 +1,5 @@
 import React from 'react'
-import { Avatar } from '../components/core/Avatar'
+import { ChampAvatar } from '../components/ChampAvatar'
 import { Badge } from '../components/core/Badge'
 import { Icon } from '../components/Icon'
 import { MATCHES, type MatchMock } from '../data/mockData'
@@ -20,7 +20,7 @@ function MatchRow({ m, onOpen }: { m: MatchMock; onOpen: (m: MatchMock) => void 
   return (
     <button className="ck-match" data-win={String(m.win)} onClick={() => onOpen(m)}>
       <span className="ck-match__bar" />
-      <Avatar name={m.champ} size="md" shape="rounded" ring={m.win ? 'win' : 'loss'} />
+      <ChampAvatar name={m.champ} size="md" shape="rounded" ring={m.win ? 'win' : 'loss'} />
       <div style={{ minWidth: 170, textAlign: 'left' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>{m.champ}</span>
