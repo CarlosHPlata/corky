@@ -26,6 +26,34 @@ export function runMigrations(db: Database.Database): void {
       raw_json TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS summoner_profile (
+      puuid           TEXT PRIMARY KEY,
+      game_name       TEXT NOT NULL,
+      tag_line        TEXT NOT NULL,
+      platform        TEXT NOT NULL,
+      region          TEXT NOT NULL,
+      profile_icon_id INTEGER NOT NULL,
+      summoner_level  INTEGER NOT NULL,
+      queue_type      TEXT,
+      tier            TEXT,
+      division        TEXT,
+      league_points   INTEGER,
+      wins            INTEGER,
+      losses          INTEGER,
+      updated_at      INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS lp_snapshots (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      puuid         TEXT NOT NULL,
+      ts            INTEGER NOT NULL,
+      tier          TEXT NOT NULL,
+      division      TEXT NOT NULL,
+      league_points INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_lp_snapshots_puuid_ts ON lp_snapshots (puuid, ts);
+
     CREATE TABLE IF NOT EXISTS features (
       match_id TEXT PRIMARY KEY,
       json     TEXT NOT NULL

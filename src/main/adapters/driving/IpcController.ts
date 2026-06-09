@@ -1,11 +1,17 @@
 import { ipcMain } from 'electron'
 import type { SyncRecentMatches } from '../../application/commands/SyncRecentMatches'
+import type { SyncSummonerProfile } from '../../application/commands/SyncSummonerProfile'
 import type { GetMatchList } from '../../application/queries/GetMatchList'
+import type { GetSummonerProfile } from '../../application/queries/GetSummonerProfile'
+import type { GetLpHistory } from '../../application/queries/GetLpHistory'
 import type { GetCoachReport } from '../../application/queries/GetCoachReport'
 
 export function registerIpcHandlers(deps: {
   syncRecentMatches: SyncRecentMatches
+  syncSummonerProfile: SyncSummonerProfile
   getMatchList: GetMatchList
+  getSummonerProfile: GetSummonerProfile
+  getLpHistory: GetLpHistory
   getCoachReport: GetCoachReport
 }): void {
   ipcMain.handle('matches:sync', async (_event, count: number) => {
@@ -14,6 +20,18 @@ export function registerIpcHandlers(deps: {
 
   ipcMain.handle('matches:list', () => {
     return deps.getMatchList.execute()
+  })
+
+  ipcMain.handle('summoner:sync', async () => {
+    await deps.syncSummonerProfile.execute()
+  })
+
+  ipcMain.handle('summoner:get', () => {
+    return deps.getSummonerProfile.execute()
+  })
+
+  ipcMain.handle('summoner:lp-history', () => {
+    return deps.getLpHistory.execute()
   })
 
   ipcMain.handle('report:get', (_event, matchId: string) => {

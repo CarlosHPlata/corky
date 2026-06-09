@@ -1,5 +1,6 @@
 import type { MatchDataSource } from '../ports/MatchDataSource'
 import type { MatchRepository } from '../ports/MatchRepository'
+import { extractMatchSummary } from '../../domain/matchSummary'
 
 export interface SyncRecentMatchesConfig {
   riotId: string
@@ -32,22 +33,9 @@ export class SyncRecentMatches {
       ])
 
       const raw = JSON.parse(detail.rawJson)
-      const participant = raw.info.participants.find(
-        (p: { puuid: string }) => p.puuid === account.puuid
-      )
+      const summary = extractMatchSummary(raw, account.puuid)
 
-      this.repository.insertMatch(
-        {
-          matchId,
-          puuid: account.puuid,
-          queue: raw.info.queueId,
-          champion: participant?.championName ?? 'Unknown',
-          win: participant?.win ?? false,
-          gameCreation: raw.info.gameCreation,
-          gameDuration: raw.info.gameDuration
-        },
-        detail.rawJson
-      )
+      this.repository.insertMatch(summary, detail.rawJson)
       this.repository.insertTimeline(timeline)
     }
   }

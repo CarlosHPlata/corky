@@ -1,6 +1,17 @@
 import type Database from 'better-sqlite3'
 import type { Account, MatchSummary, MatchDetail, Timeline } from '@shared/types'
 import type { MatchRepository } from '../../../application/ports/MatchRepository'
+import { extractMatchSummary } from '../../../domain/matchSummary'
+
+function toAccount(row: Record<string, string>): Account {
+  return {
+    puuid: row.puuid,
+    gameName: row.game_name,
+    tagLine: row.tag_line,
+    platform: row.platform,
+    region: row.region
+  }
+}
 
 export class SqliteMatchRepository implements MatchRepository {
   constructor(private readonly db: Database.Database) {}
@@ -18,14 +29,14 @@ export class SqliteMatchRepository implements MatchRepository {
     const row = this.db
       .prepare('SELECT * FROM account WHERE puuid = ?')
       .get(puuid) as Record<string, string> | undefined
-    if (!row) return null
-    return {
-      puuid: row.puuid,
-      gameName: row.game_name,
-      tagLine: row.tag_line,
-      platform: row.platform,
-      region: row.region
-    }
+    return row ? toAccount(row) : null
+  }
+
+  getCurrentAccount(): Account | null {
+    const row = this.db
+      .prepare('SELECT * FROM account LIMIT 1')
+      .get() as Record<string, string> | undefined
+    return row ? toAccount(row) : null
   }
 
   insertMatch(summary: MatchSummary, rawJson: string): void {
@@ -56,17 +67,9 @@ export class SqliteMatchRepository implements MatchRepository {
 
   listMatches(puuid: string): MatchSummary[] {
     const rows = this.db
-      .prepare('SELECT * FROM matches WHERE puuid = ? ORDER BY game_creation DESC')
-      .all(puuid) as Record<string, unknown>[]
-    return rows.map((r) => ({
-      matchId: r.match_id as string,
-      puuid: r.puuid as string,
-      queue: r.queue as number,
-      champion: r.champion as string,
-      win: (r.win as number) === 1,
-      gameCreation: r.game_creation as number,
-      gameDuration: r.game_duration as number
-    }))
+      .prepare('SELECT raw_json FROM matches WHERE puuid = ? ORDER BY game_creation DESC')
+      .all(puuid) as { raw_json: string }[]
+    return rows.map((r) => extractMatchSummary(JSON.parse(r.raw_json), puuid))
   }
 
   getMatchDetail(matchId: string): MatchDetail | null {

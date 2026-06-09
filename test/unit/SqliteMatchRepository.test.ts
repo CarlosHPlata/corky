@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { runMigrations } from '../../src/main/adapters/driven/sqlite/schema'
 import { SqliteMatchRepository } from '../../src/main/adapters/driven/sqlite/SqliteMatchRepository'
-import type { Account, MatchSummary } from '../../src/shared/types'
+import { extractMatchSummary } from '../../src/main/domain/matchSummary'
+import type { Account } from '../../src/shared/types'
 
 let db: Database.Database
 let repo: SqliteMatchRepository
@@ -25,14 +26,34 @@ const account: Account = {
   region: 'asia'
 }
 
-const summary: MatchSummary = {
-  matchId: 'KR_123456',
-  puuid: 'puuid-123',
-  queue: 420,
-  champion: 'Ahri',
-  win: true,
-  gameCreation: 1700000000000,
-  gameDuration: 1800
+function buildRaw(matchId: string, puuid: string, gameCreation = 1700000000000) {
+  return {
+    metadata: { matchId },
+    info: {
+      queueId: 420,
+      gameCreation,
+      gameDuration: 1800,
+      participants: [
+        {
+          puuid,
+          championName: 'Ahri',
+          win: true,
+          kills: 5,
+          deaths: 3,
+          assists: 7,
+          totalMinionsKilled: 200,
+          neutralMinionsKilled: 0,
+          goldEarned: 12000,
+          teamPosition: 'MIDDLE'
+        }
+      ]
+    }
+  }
+}
+
+function store(matchId: string, gameCreation?: number) {
+  const raw = buildRaw(matchId, account.puuid, gameCreation)
+  repo.insertMatch(extractMatchSummary(raw, account.puuid), JSON.stringify(raw))
 }
 
 describe('SqliteMatchRepository', () => {
@@ -45,9 +66,15 @@ describe('SqliteMatchRepository', () => {
     expect(repo.getAccount('unknown')).toBeNull()
   })
 
+  it('getCurrentAccount returns the single stored account', () => {
+    expect(repo.getCurrentAccount()).toBeNull()
+    repo.upsertAccount(account)
+    expect(repo.getCurrentAccount()).toEqual(account)
+  })
+
   it('inserts a match and detects it as stored', () => {
-    repo.insertMatch(summary, '{}')
-    expect(repo.hasMatch(summary.matchId)).toBe(true)
+    store('KR_123456')
+    expect(repo.hasMatch('KR_123456')).toBe(true)
   })
 
   it('hasMatch returns false for unknown match', () => {
@@ -55,23 +82,36 @@ describe('SqliteMatchRepository', () => {
   })
 
   it('lists matches for a puuid ordered by game_creation desc', () => {
-    const older: MatchSummary = { ...summary, matchId: 'KR_111', gameCreation: 100 }
-    const newer: MatchSummary = { ...summary, matchId: 'KR_222', gameCreation: 200 }
-    repo.insertMatch(older, '{}')
-    repo.insertMatch(newer, '{}')
+    store('KR_111', 100)
+    store('KR_222', 200)
     const list = repo.listMatches(account.puuid)
     expect(list[0].matchId).toBe('KR_222')
     expect(list[1].matchId).toBe('KR_111')
   })
 
+  it('reconstructs enriched fields from stored raw json', () => {
+    store('KR_123456')
+    const [m] = repo.listMatches(account.puuid)
+    expect(m).toMatchObject({
+      matchId: 'KR_123456',
+      champion: 'Ahri',
+      role: 'Mid',
+      win: true,
+      kills: 5,
+      deaths: 3,
+      assists: 7,
+      cs: 200
+    })
+  })
+
   it('insertMatch is idempotent (INSERT OR IGNORE)', () => {
-    repo.insertMatch(summary, '{}')
-    repo.insertMatch(summary, '{}')
+    store('KR_123456')
+    store('KR_123456')
     expect(repo.listMatches(account.puuid)).toHaveLength(1)
   })
 
   it('stores and retrieves a timeline', () => {
-    repo.insertTimeline({ matchId: summary.matchId, rawJson: '{"frames":[]}' })
-    expect(repo.getTimeline(summary.matchId)?.rawJson).toBe('{"frames":[]}')
+    repo.insertTimeline({ matchId: 'KR_123456', rawJson: '{"frames":[]}' })
+    expect(repo.getTimeline('KR_123456')?.rawJson).toBe('{"frames":[]}')
   })
 })

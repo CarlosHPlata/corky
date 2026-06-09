@@ -60,6 +60,18 @@ Farming and objective securing run through points 4, 6, and 7 as first-class top
  
 ### Flow B — Champion select assistant
 During champion select, Corky reads the picks and your assigned role and gives matchup advice, the main threats to watch, your likely win condition, and a build/rune direction — so you start the game with a plan.
+
+### Home / Overview — the landing surface
+The first thing Corky shows is an at-a-glance read of where you stand, so the coaching flows always open in context rather than cold. It pulls **only player-visible information** straight from the Riot API and the local store:
+
+- **Identity & rank.** Your Riot ID, profile icon, current tier/division and LP for ranked solo.
+- **Recent form.** Your last ranked games as a win/loss streak, with the headline numbers per game (champion, role, K/D/A, CS and CS/min, gold, duration, when).
+- **Champion pool.** Your most-played champions over those games with win rate, KDA and CS/min, so trends in *what you play* are obvious.
+- **LP & rank trajectory.** How your LP has moved over time. **Riot does not expose historical LP**, so Corky records your LP on each sync and builds the trajectory *forward* — and says plainly that tracking starts now until it has enough points to draw. (Honest about limits, by design.)
+
+The overview leads with this plain, evidence-only information; the *coaching* on top of it — next-game focus tasks and session analysis — comes from Flow A and is surfaced here once a game has been analysed.
+
+**Syncing is automatic.** Corky syncs your recent matches and rank when the app opens and then on a periodic cadence (a typical game runs 20–40 minutes, so a ~30-minute refresh catches new games soon after they finish) — and a manual sync is always available. It fetches each match once and remembers it locally, so the overview is fast and works offline.
  
 ---
  
@@ -82,6 +94,11 @@ During champion select, Corky reads the picks and your assigned role and gives m
 - **As a player**, during champ select I want advice on my matchup and the enemy's main threats, **so that** I can plan how to play the lane.
 - **As a player**, I want a suggested win condition based on both team compositions, **so that** I understand my role in the game.
 - **As a player**, I want a build and rune direction suggestion, **so that** I start the game prepared.
+### Home / Overview
+- **As a player**, when I open Corky I want an at-a-glance read of my rank, recent form and champion pool, **so that** I see where I stand before diving into any single game.
+- **As a player**, I want my recent ranked games summarised with the headline numbers (result, champion, K/D/A, CS, gold), **so that** I can scan my session without opening each report.
+- **As a player**, I want to see how my LP has moved over time, **so that** I can tell whether I'm climbing, stalling, or sliding — and I'd rather Corky build that honestly from now on than fake a history it can't get.
+- **As a player**, I want my games to sync automatically when I open the app and periodically while it's running, **so that** the overview is always current without me clicking refresh.
 ### Foundational (enables the above)
 - **As a player**, I want Corky to sync my recent matches and remember them, **so that** analysis is fast and works offline.
 ---

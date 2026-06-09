@@ -38,3 +38,8 @@ export function champImgUrl(displayName: string): string | null {
   if (!file) return null
   return `${BASE}/cdn/${version}/img/champion/${file}`
 }
+
+export function profileIconUrl(iconId: number): string | null {
+  if (!version) return null
+  return `${BASE}/cdn/${version}/img/profileicon/${iconId}.png`
+}

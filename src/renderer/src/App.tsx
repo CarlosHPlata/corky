@@ -8,7 +8,11 @@ import { ChampSelect } from './screens/ChampSelect'
 import { Trends } from './screens/Trends'
 import { Settings } from './screens/Settings'
 import { Home } from './screens/Home'
-import { SUMMONER, MATCHES, type MatchMock } from './data/mockData'
+import { type MatchMock } from './data/mockData'
+import { useAppData } from './data/useAppData'
+import { rankLabel } from './utils/format'
+import { profileIconUrl } from './utils/ddragon'
+import type { SummonerProfile } from '@shared/types'
 
 type Screen = 'home' | 'history' | 'report' | 'champ' | 'trends' | 'settings'
 
@@ -19,15 +23,6 @@ const NAV: { id: Screen; label: string; icon: string }[] = [
   { id: 'trends', label: 'Trends', icon: 'trending-up' },
   { id: 'settings', label: 'Settings', icon: 'settings' },
 ]
-
-const TITLES: Record<Screen, [string, string | null]> = {
-  home:    ['Overview', 'Your session at a glance'],
-  history: ['Match history', `Your last ${MATCHES.length} ranked games`],
-  report:  ['Post-game report', null],
-  champ:   ['Champion select', 'Live · reading your lobby'],
-  trends:  ['Trends', 'Patterns across your recent games'],
-  settings:['Settings', null],
-}
 
 function Logo() {
   return (
@@ -49,8 +44,15 @@ function Logo() {
   )
 }
 
-function Sidebar({ screen, onNav }: { screen: Screen; onNav: (s: Screen) => void }) {
-  const s = SUMMONER
+function Sidebar({ screen, onNav, profile, matchCount }: {
+  screen: Screen; onNav: (s: Screen) => void; profile: SummonerProfile | null; matchCount: number
+}) {
+  const name = profile?.gameName ?? '—'
+  const tag = profile?.tagLine ?? ''
+  const rank = profile ? rankLabel(profile.soloRank) : 'Unranked'
+  const lp = profile?.soloRank?.leaguePoints
+  const icon = profile ? profileIconUrl(profile.profileIconId) : null
+
   return (
     <aside style={{
       width: 'var(--sidebar-w)', flex: 'none', background: 'var(--bg-panel)',
@@ -66,7 +68,7 @@ function Sidebar({ screen, onNav }: { screen: Screen; onNav: (s: Screen) => void
             <button key={n.id} onClick={() => onNav(n.id)} className="ck-nav-item" data-active={String(active)}>
               <Icon name={n.icon} size={18} />
               <span>{n.label}</span>
-              {n.id === 'history' && <span className="ck-nav-pill">{MATCHES.length}</span>}
+              {n.id === 'history' && matchCount > 0 && <span className="ck-nav-pill">{matchCount}</span>}
             </button>
           )
         })}
@@ -86,13 +88,13 @@ function Sidebar({ screen, onNav }: { screen: Screen; onNav: (s: Screen) => void
           display: 'flex', alignItems: 'center', gap: 11, padding: '10px',
           background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
         }}>
-          <Avatar name={s.name} size="md" ring="accent" />
+          <Avatar name={name} src={icon ?? undefined} size="md" ring="accent" />
           <div style={{ minWidth: 0, lineHeight: 1.3 }}>
             <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
-              {s.name} <span style={{ color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>#{s.tag}</span>
+              {name} {tag && <span style={{ color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>#{tag}</span>}
             </div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
-              {s.rank} · {s.lp} LP
+              {rank}{lp != null ? ` · ${lp} LP` : ''}
             </div>
           </div>
         </div>
@@ -136,15 +138,24 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('home')
   const [match, setMatch] = useState<MatchMock | null>(null)
   const [analyzed, setAnalyzed] = useState<Record<string, boolean>>({})
-  const [syncing, setSyncing] = useState(false)
+
+  const data = useAppData()
 
   function nav(id: Screen) { setScreen(id); if (id !== 'report') setMatch(null) }
   function openMatch(m: MatchMock) { setMatch(m); setScreen('report') }
-  function sync() { setSyncing(true); setTimeout(() => setSyncing(false), 1500) }
+
+  const titles: Record<Screen, [string, string | null]> = {
+    home:    ['Overview', 'Your session at a glance'],
+    history: ['Match history', `Your last ${data.matches.length} ranked games`],
+    report:  ['Post-game report', null],
+    champ:   ['Champion select', 'Live · reading your lobby'],
+    trends:  ['Trends', 'Patterns across your recent games'],
+    settings:['Settings', null],
+  }
 
   const [title, subtitle] = match && screen === 'report'
     ? [`${match.champ} · ${match.win ? 'Win' : 'Loss'}`, `${match.queue} · ${match.dur}`]
-    : TITLES[screen]
+    : titles[screen]
 
   const showSync = screen === 'home' || screen === 'history' || screen === 'report'
   const backBtn = screen === 'report'
@@ -154,7 +165,7 @@ export default function App() {
   const key = screen === 'report' ? `report-${match?.id ?? 'x'}` : screen
 
   let body: React.ReactNode
-  if (screen === 'home') body = <Home onOpen={openMatch} onNav={nav} />
+  if (screen === 'home') body = <Home data={data} onOpen={openMatch} onNav={nav} />
   else if (screen === 'history') body = <MatchHistory onOpen={openMatch} />
   else if (screen === 'report' && match) body = <CoachReport match={match} analyzed={!!analyzed[match.id]} onAnalyzed={() => setAnalyzed(a => ({ ...a, [match.id]: true }))} />
   else if (screen === 'champ') body = <ChampSelect />
@@ -163,9 +174,9 @@ export default function App() {
 
   return (
     <>
-      <Sidebar screen={screen} onNav={nav} />
+      <Sidebar screen={screen} onNav={nav} profile={data.profile} matchCount={data.matches.length} />
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <TopBar title={title} subtitle={subtitle} onSync={showSync ? sync : undefined} syncing={syncing} left={backBtn} />
+        <TopBar title={title} subtitle={subtitle} onSync={showSync ? data.sync : undefined} syncing={data.syncing} left={backBtn} />
         <div className="ck-scroll">
           <div key={key} className="ck-fade">{body}</div>
         </div>

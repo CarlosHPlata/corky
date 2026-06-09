@@ -37,7 +37,22 @@ Execution checklist for an agent (e.g. Claude Code). Work **top to bottom**, che
 - [x] Implement query `GetMatchList()`: return stored `MatchSummary[]`.
 - [x] Wire two IPC channels (`matches:sync`, `matches:list`) through preload `contextBridge`.
 - [x] Renderer: one screen with a "Sync last 20" button calling `window.api.syncMatches(20)`, then rendering `getMatchList()`.
-- [ ] **Acceptance:** `npm run dev` → click sync → matches appear → re-running does not re-fetch. Riot key never reaches the renderer.
+- [x] **Acceptance:** `npm run dev` → click sync → matches appear → re-running does not re-fetch. Riot key never reaches the renderer.
+---
+ 
+## M0.5 — Home dashboard wired to live Riot data
+
+Wires the mocked Overview to real data (see `REQUIREMENTS.md` → "Home / Overview"). Plain, evidence-only info only; coaching (focus tasks, session analysis) stays on mock until M1/M2.
+
+- [x] Enrich the match read model: `MatchSummary` gains role, K/D/A, CS, CS/min, gold, gold/min — extracted **from stored raw JSON** via pure `domain/matchSummary.ts` (no re-fetch, no schema migration; unit-tested).
+- [x] Summoner profile + rank: `summoner-v4` (icon, level) and `league-v4 entries/by-puuid` (tier/division/LP) on **platform** routes, behind a new `SummonerDataSource` port on `RiotApiClient`.
+- [x] LP trajectory: record an LP snapshot on each sync (deduped — only when it moves) in a new `lp_snapshots` table; Riot exposes no LP history, so the chart builds forward and says so until it has ≥2 points.
+- [x] New tables `summoner_profile` + `lp_snapshots`; new `SummonerRepository` (`SqliteSummonerRepository`).
+- [x] Use cases: command `SyncSummonerProfile`; queries `GetSummonerProfile`, `GetLpHistory`. `GetMatchList` resolves the account lazily via `getCurrentAccount()` (fixes stale-PUUID-at-startup).
+- [x] IPC channels `summoner:sync` / `summoner:get` / `summoner:lp-history` through preload; container wiring.
+- [x] Renderer: `useAppData` hook loads cached data instantly, **auto-syncs on first open and every ~30 min** (overlap-guarded), with manual sync, loading/empty/error states; `Home` + `Sidebar` render real identity, rank/LP, recent form, champion pool, LP chart.
+- [x] Config: `RIOT_ID` must be quoted in `.env` (the `#` is a dotenv inline comment) — `.env.example` fixed and `resolveAccount` throws a clear error on a tagless ID.
+- [ ] **Known gap:** `better-sqlite3` Vitest runs need a Node-ABI build of the native module (the app build targets Electron's ABI), so the SQLite repository tests don't run under plain `npm test` yet.
 ---
  
 ## M1 — Feature extraction engine (TDD)
