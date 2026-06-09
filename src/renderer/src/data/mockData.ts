@@ -62,6 +62,7 @@ export interface DeathData {
   n: number
   min: string
   type: 'caught_out' | 'overextended' | 'fair_fight' | 'outnumbered'
+  where: string
   note: string
 }
 
@@ -168,9 +169,9 @@ export const REPORT_LOSS: ReportMock = {
   chartMarks: [8, 9],
   chartFoot: [{ t: '0:00' }, { t: '+1.4k @ 14:00', color: 'var(--win)' }, { t: '−2.1k @ 24:00', color: 'var(--loss)' }, { t: '31:24' }],
   deaths: [
-    { n: 1, min: '8:40', type: 'fair_fight', note: '2v2 trade gone wrong after roam.' },
-    { n: 2, min: '22:10', type: 'caught_out', note: 'Alone, no vision, walked into the enemy jungler.' },
-    { n: 3, min: '27:35', type: 'caught_out', note: 'Facechecked the Baron pit solo before the fight.' },
+    { n: 1, min: '8:40', type: 'fair_fight', where: 'Mid lane', note: '2v2 trade gone wrong after roam.' },
+    { n: 2, min: '22:10', type: 'caught_out', where: 'River', note: 'Alone, no vision, walked into the enemy jungler.' },
+    { n: 3, min: '27:35', type: 'caught_out', where: 'River', note: 'Facechecked the Baron pit solo before the fight.' },
   ],
   turningPoints: [
     { time: '22:10', swing: '−1.6k swing', dir: 'down', you: { x: 24, y: 30 }, event: { x: 62, y: 60 }, what: 'First solo death in the river handed the enemy mid a reset and Rift Herald.', better: 'Recall on the lead at 21:30 — there’s nothing to do alone in the bottom river.' },
@@ -236,8 +237,8 @@ export const REPORT_WIN: ReportMock = {
   chartMarks: [4, 9],
   chartFoot: [{ t: '0:00' }, { t: '+2.1k @ 14:00', color: 'var(--win)' }, { t: '+3.2k @ 24:00', color: 'var(--win)' }, { t: '28:50' }],
   deaths: [
-    { n: 1, min: '12:20', type: 'fair_fight', note: 'Traded a kill for a kill on a clean all-in. Fine.' },
-    { n: 2, min: '24:05', type: 'fair_fight', note: 'Died in the winning fight — your team aced after.' },
+    { n: 1, min: '12:20', type: 'fair_fight', where: 'Mid lane', note: 'Traded a kill for a kill on a clean all-in. Fine.' },
+    { n: 2, min: '24:05', type: 'fair_fight', where: 'Dragon pit', note: 'Died in the winning fight — your team aced after.' },
   ],
   turningPoints: [
     { time: '9:10', swing: '+1.3k swing', dir: 'up', you: { x: 48, y: 46 }, event: { x: 52, y: 44 }, what: 'Solo-killed the enemy mid on a Charm → ult all-in, then reset on the level lead.', better: 'Exactly right — you recalled, bought, and used the tempo to path bot for first drake.' },

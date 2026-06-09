@@ -344,7 +344,34 @@ code, kbd, samp, pre { font-family: var(--font-mono); }
   transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 .ck-field::placeholder { color: var(--text-faint); }
+.ck-field:hover { border-color: var(--border-strong); }
 .ck-field:focus-visible { outline: none; border-color: var(--gold-500); box-shadow: var(--focus-ring); }
+
+/* ---------- Report — gated AI sections -------------------- */
+/* Placeholder that stands in for any Corky-written block until analysis runs. */
+.ck-gated {
+  display: flex; align-items: center; gap: 16px; padding: 18px 20px;
+  border: 1px dashed var(--border-strong); border-radius: var(--radius-lg);
+  background: var(--bg-card);
+}
+.ck-gated__icon {
+  flex: none; width: 38px; height: 38px; border-radius: var(--radius-md);
+  display: grid; place-items: center; background: var(--accent-soft); color: var(--gold-400);
+}
+.ck-gated__body { flex: 1; min-width: 0; }
+.ck-gated__dots {
+  font-family: var(--font-mono); font-size: 20px; line-height: 1; letter-spacing: 3px;
+  color: var(--text-faint);
+}
+.ck-gated__title {
+  font-family: var(--font-display); font-weight: 600; font-size: 14.5px;
+  color: var(--text-secondary); margin: 6px 0 2px;
+}
+.ck-gated__hint {
+  font-family: var(--font-sans); font-size: 12.5px; color: var(--text-faint); line-height: 1.45;
+}
+
+.ck-inline-dots { font-family: var(--font-mono); font-size: 13px; letter-spacing: 2px; color: var(--text-faint); }
 
 /* ---------- Button ---------------------------------------- */
 .ck-btn {
@@ -418,6 +445,7 @@ code, kbd, samp, pre { font-family: var(--font-mono); }
 .ck-card__bar--loss { background: var(--loss); }
 .ck-card__bar--accent { background: var(--accent); }
 .ck-card__bar--objective { background: var(--objective); }
+.ck-card__bar--info { background: var(--data-ally); }
 .ck-card__body { padding: var(--pad, 18px); }
 .ck-card__header {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;

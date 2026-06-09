@@ -4,7 +4,7 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   title?: string
   eyebrow?: string
   action?: React.ReactNode
-  accent?: 'win' | 'loss' | 'accent' | 'objective'
+  accent?: 'win' | 'loss' | 'accent' | 'objective' | 'info'
   interactive?: boolean
   flush?: boolean
   padding?: number | string
