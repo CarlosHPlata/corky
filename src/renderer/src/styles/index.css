@@ -613,3 +613,61 @@ code, kbd, samp, pre { font-family: var(--font-mono); }
 .ck-evidence__icon { width: 12px; height: 12px; opacity: 0.8; display: inline-flex; align-items: center; }
 .ck-evidence--death { color: var(--red-300); background: var(--loss-soft); border-color: rgba(255,87,101,0.28); }
 .ck-evidence--objective { color: var(--violet-400); background: var(--objective-soft); border-color: rgba(155,123,240,0.28); }
+
+/* ---------- MatchTimeline --------------------------------- */
+.ck-tl {
+  background: var(--bg-card); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lift), var(--shadow-md);
+  padding: 16px 18px 14px;
+}
+.ck-tl__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.ck-tl__title { font-family: var(--font-display); font-weight: 600; font-size: var(--text-md); color: var(--text-primary); }
+.ck-tl__sub { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-muted); }
+.ck-tl__legend { display: flex; gap: 14px; }
+.ck-tl__lg { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-sans); font-size: 11px; color: var(--text-muted); }
+.ck-tl__lgdot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.ck-tl__plot { position: relative; height: 188px; overflow: visible; }
+.ck-tl__svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.ck-tl__pin {
+  position: absolute; transform: translate(-50%, -50%); width: 26px; height: 26px;
+  border-radius: 50%; display: grid; place-items: center; cursor: pointer; padding: 0;
+  background: var(--bg-app); border: 1.5px solid var(--_bd); color: var(--_c); z-index: 2;
+  transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-out);
+}
+.ck-tl__pin svg { width: 14px; height: 14px; stroke-width: 2; }
+.ck-tl__pin:hover, .ck-tl__pin[data-active="true"] {
+  transform: translate(-50%, -50%) scale(1.18);
+  box-shadow: 0 0 0 4px var(--_bg), 0 4px 14px rgba(0,0,0,0.5);
+}
+.ck-tl__pin:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.ck-tl__tip {
+  position: absolute; transform: translateX(-50%); bottom: calc(100% + 12px); width: 220px; z-index: 5;
+  background: var(--bg-card-raised); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
+  padding: 10px 12px; pointer-events: none;
+}
+.ck-tl__tip::after {
+  content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  border: 6px solid transparent; border-top-color: var(--border-strong);
+}
+.ck-tl__tiptime { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+.ck-tl__tiplabel { font-family: var(--font-display); font-weight: 600; font-size: 13.5px; margin: 1px 0 3px; }
+.ck-tl__tipdetail { font-family: var(--font-sans); font-size: 12px; color: var(--text-secondary); line-height: 1.45; }
+.ck-tl__axis { position: relative; height: 16px; margin-top: 2px; }
+.ck-tl__tick { position: absolute; transform: translateX(-50%); font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); }
+.ck-tl__strip { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.ck-tl__chip {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  background: var(--bg-app); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill); padding: 4px 11px 4px 4px;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.ck-tl__chip:hover, .ck-tl__chip[data-active="true"] { background: var(--bg-card-raised); border-color: var(--_bd); }
+.ck-tl__chip:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.ck-tl__chipdot {
+  width: 22px; height: 22px; flex: none; border-radius: 50%;
+  display: grid; place-items: center; background: var(--_bg); color: var(--_c);
+}
+.ck-tl__chipdot svg { width: 13px; height: 13px; stroke-width: 2; }
+.ck-tl__chiptime { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+.ck-tl__chiplabel { font-family: var(--font-sans); font-size: 12.5px; font-weight: 500; color: var(--text-primary); }

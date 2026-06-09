@@ -7,11 +7,13 @@ import { CoachReport } from './screens/CoachReport'
 import { ChampSelect } from './screens/ChampSelect'
 import { Trends } from './screens/Trends'
 import { Settings } from './screens/Settings'
+import { Home } from './screens/Home'
 import { SUMMONER, MATCHES, type MatchMock } from './data/mockData'
 
-type Screen = 'history' | 'report' | 'champ' | 'trends' | 'settings'
+type Screen = 'home' | 'history' | 'report' | 'champ' | 'trends' | 'settings'
 
 const NAV: { id: Screen; label: string; icon: string }[] = [
+  { id: 'home', label: 'Home', icon: 'crosshair' },
   { id: 'history', label: 'Match history', icon: 'history' },
   { id: 'champ', label: 'Champ select', icon: 'swords' },
   { id: 'trends', label: 'Trends', icon: 'trending-up' },
@@ -19,6 +21,7 @@ const NAV: { id: Screen; label: string; icon: string }[] = [
 ]
 
 const TITLES: Record<Screen, [string, string | null]> = {
+  home:    ['Overview', 'Your session at a glance'],
   history: ['Match history', `Your last ${MATCHES.length} ranked games`],
   report:  ['Post-game report', null],
   champ:   ['Champion select', 'Live · reading your lobby'],
@@ -58,7 +61,7 @@ function Sidebar({ screen, onNav }: { screen: Screen; onNav: (s: Screen) => void
 
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         {NAV.map(n => {
-          const active = screen === n.id || (screen === 'report' && n.id === 'history')
+          const active = screen === n.id || (screen === 'report' && n.id === 'history') || (screen === 'home' && n.id === 'home')
           return (
             <button key={n.id} onClick={() => onNav(n.id)} className="ck-nav-item" data-active={String(active)}>
               <Icon name={n.icon} size={18} />
@@ -130,7 +133,7 @@ function TopBar({ title, subtitle, onSync, syncing, left }: {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('history')
+  const [screen, setScreen] = useState<Screen>('home')
   const [match, setMatch] = useState<MatchMock | null>(null)
   const [analyzed, setAnalyzed] = useState<Record<string, boolean>>({})
   const [syncing, setSyncing] = useState(false)
@@ -143,7 +146,7 @@ export default function App() {
     ? [`${match.champ} · ${match.win ? 'Win' : 'Loss'}`, `${match.queue} · ${match.dur}`]
     : TITLES[screen]
 
-  const showSync = screen === 'history' || screen === 'report'
+  const showSync = screen === 'home' || screen === 'history' || screen === 'report'
   const backBtn = screen === 'report'
     ? <Button variant="ghost" size="sm" onClick={() => nav('history')} iconLeft={<Icon name="chevron-left" size={16} />}>Back</Button>
     : undefined
@@ -151,7 +154,8 @@ export default function App() {
   const key = screen === 'report' ? `report-${match?.id ?? 'x'}` : screen
 
   let body: React.ReactNode
-  if (screen === 'history') body = <MatchHistory onOpen={openMatch} />
+  if (screen === 'home') body = <Home onOpen={openMatch} onNav={nav} />
+  else if (screen === 'history') body = <MatchHistory onOpen={openMatch} />
   else if (screen === 'report' && match) body = <CoachReport match={match} analyzed={!!analyzed[match.id]} onAnalyzed={() => setAnalyzed(a => ({ ...a, [match.id]: true }))} />
   else if (screen === 'champ') body = <ChampSelect />
   else if (screen === 'trends') body = <Trends />
