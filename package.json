@@ -41,7 +41,7 @@
     "vitest": "^3.2.3"
   },
   "engines": {
-    "node": "24.x"
+    "node": ">=22"
   },
   "build": {
     "appId": "com.corky.app",
