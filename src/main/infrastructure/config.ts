@@ -17,5 +17,10 @@ export const config = {
   riotId: require('RIOT_ID'),
   platform: process.env.PLATFORM ?? 'euw1',
   region: process.env.REGION ?? 'europe',
-  anthropicModel: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
+  anthropicModel: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6',
+  // Two-tier match analysis (spec 004): a cheap/fast model for the decoration
+  // passes (caveats/framing, highlight narration) and a strong model for the
+  // heavy passes (overall review, focus tasks). Overridable per environment.
+  anthropicLightModel: process.env.CORKY_LIGHT_MODEL ?? 'claude-haiku-4-5',
+  anthropicHeavyModel: process.env.CORKY_HEAVY_MODEL ?? 'claude-opus-4-8'
 }

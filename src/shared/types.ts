@@ -274,6 +274,161 @@ export interface SessionGoalInput {
   notes: string
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// AI Match Analysis — "Corky's read" (spec 004). The interpretive half of the
+// match report, produced by four cooperating passes, each owning its own
+// section. Field names map onto the renderer's existing report components.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** A metric the extraction engine can compute (focus tasks must use one of these). */
+export type MetricKey =
+  | 'cs_at_10'
+  | 'cs_per_min'
+  | 'gold_at_14'
+  | 'gold_at_24'
+  | 'vision_score'
+  | 'solo_deaths'
+  | 'kill_participation'
+  | 'deaths'
+
+/** A claim's evidence anchor. Structured kinds (`stat`/`marker`) must cite an id
+ * present in the computed anchor catalog; `benchmark`/`note` are typed chips. */
+export interface EvidenceRef {
+  id: string
+  kind: 'stat' | 'marker' | 'benchmark' | 'note'
+  label?: string
+}
+
+/** A point on the minimap, 0–100 normalized (matches the renderer's Pos). */
+export interface MapPos {
+  x: number
+  y: number
+}
+
+/** Which pass produced a section, and whether it succeeded. */
+export type PassKey = 'framing' | 'narration' | 'review' | 'tasks'
+export type SectionStatus = 'done' | 'error' | 'skipped'
+
+/** Pass 1 — the decoration layer (MVP-style label, tips, headline, quick read). */
+export interface FramingOutput {
+  headlineTag: string
+  headlineTagIntent: 'win' | 'loss' | 'objective' | 'accent' | 'warn' | 'info' | 'neutral'
+  quickRead: string
+  /** null on a degenerate game (remake/AFK) — never invented. */
+  mvp: { champion: string; isYou: boolean; teamId: number; justification: string } | null
+  matchupTips: string[]
+  /** Optional UX-defined slot→caption map (title-bar text, section spans). */
+  captions?: Record<string, string>
+}
+
+/** A short factual narration attached to a spec-003 timeline highlight. */
+export interface HighlightNarration {
+  ref: EvidenceRef
+  text: string
+}
+
+/** How a player death read (character), with a short factual line. */
+export interface DeathNarration {
+  ref: EvidenceRef
+  character: 'caught_out' | 'overextended' | 'fair_fight' | 'objective_trade' | 'unclear'
+  text: string
+}
+
+/** A selected swing on the timeline (maps to the TurningPoint component). */
+export interface TurningPoint {
+  time: string
+  swing: string
+  dir: 'up' | 'down'
+  you: MapPos
+  event: MapPos
+  objective?: MapPos
+  what: string
+  better: string
+}
+
+/** Pass 2 — highlight & death narration + the chosen turning points. */
+export interface NarrationOutput {
+  highlightNarrations: HighlightNarration[]
+  deathNarrations: DeathNarration[]
+  turningPoints: TurningPoint[]
+}
+
+/** One structured claim inside the prose verdict, anchored to evidence. */
+export interface ReviewClaim {
+  text: string
+  ref: EvidenceRef
+}
+
+/** Pass 3 — the prose verdict (its own section). */
+export interface ReviewOutput {
+  /** Prose, delivered as two parts to fit the VerdictCard. */
+  verdict: { lead: string; gild: string }
+  /** One or two sentences on the single most important thing to change next game. */
+  improve: string
+  claims: ReviewClaim[]
+  /** Badge label for the basis actually used, e.g. "vs Ahri mid meta (patch)". */
+  cohort: string
+  benchmarkBasis: BenchmarkBasis
+  confidence: 'established' | 'provisional'
+}
+
+/** A standing, global, per-user focus task (1–3 held at a time). */
+export interface StandingFocusTask {
+  id: string
+  description: string
+  metric: MetricKey
+  comparator: '>=' | '<=' | '==' | '>' | '<'
+  target: number
+  scope: 'champion' | 'role' | 'universal'
+  champion?: string
+  role?: string
+  status: 'active' | 'retired'
+  sourceMatchId: string
+}
+
+/** A standing task evaluated against one game (maps to the FocusTask component). */
+export interface FocusTaskEval {
+  description: string
+  metric: MetricKey
+  comparator: string
+  target: string
+  scope: string
+  actual?: string
+  result: 'improved' | 'held' | 'regressed' | 'not_applicable'
+}
+
+/** Pass 4 — focus tasks + the since-last loop. */
+export interface TasksOutput {
+  standing: StandingFocusTask[]
+  sinceLast: FocusTaskEval[]
+  /** true when no standing set existed before (clean since-last state). */
+  firstTime: boolean
+}
+
+/** The full interpretive read for one game, assembled from the four passes and
+ * persisted per match. Restored on report open with no model call (FR-027). */
+export interface MatchAnalysis {
+  matchId: string
+  result: 'win' | 'loss'
+  framing: FramingOutput | null
+  narration: NarrationOutput | null
+  review: ReviewOutput | null
+  tasks: TasksOutput | null
+  status: 'done' | 'partial'
+  sections: Record<PassKey, SectionStatus>
+  lightModel: string
+  heavyModel: string
+  generatedAt: number
+}
+
+/** Options for re-running an analysis. */
+export interface AnalyzeMatchOptions {
+  /** Re-run every pass, replacing the stored read (FR-028). */
+  force?: boolean
+  /** The player's per-match reflection note (renderer-local), as stated intent. */
+  reflection?: string
+}
+
 export interface IpcApi {
   /** `start` fetches an older Riot window (match-v5 offset) for infinite scroll. */
   syncMatches: (count: number, start?: number) => Promise<void>
@@ -285,7 +440,10 @@ export interface IpcApi {
   syncProfile: () => Promise<void>
   getSummonerProfile: () => Promise<SummonerProfile | null>
   getLpHistory: () => Promise<LpSnapshot[]>
-  analyzeMatch: (matchId: string) => Promise<void>
+  /** Run the four-pass AI analysis for a match; returns the assembled read (spec 004). */
+  analyzeMatch: (matchId: string, opts?: AnalyzeMatchOptions) => Promise<MatchAnalysis>
+  /** Restore the stored analysis for a match (no model call), or null if never run. */
+  getMatchAnalysis: (matchId: string) => Promise<MatchAnalysis | null>
   getCoachReport: (matchId: string) => Promise<CoachReport | null>
   /** Generate a fresh analysis and persist it as the account's latest. */
   runSessionAnalysis: () => Promise<SessionAnalysis>

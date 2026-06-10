@@ -10,11 +10,11 @@ import { Button } from '../components/core/Button'
 import { ChampAvatar } from '../components/ChampAvatar'
 import { Icon } from '../components/Icon'
 import { useMatchReport } from '../data/useMatchReport'
+import { useMatchAnalysis } from '../data/useMatchAnalysis'
 import { formatDuration, queueLabel } from '../utils/format'
-import { REPORT_LOSS, REPORT_WIN } from '../data/mockData'
 import type {
   MatchReport, MatchCore, Matchup as MatchupData, Breakdown as BreakdownData,
-  GoldTimeline, DeathMap as DeathMapData, Highlight, RosterEntry,
+  GoldTimeline, DeathMap as DeathMapData, Highlight, RosterEntry, DeathNarration,
 } from '@shared/types'
 
 // Corky desktop — Post-game report.
@@ -43,6 +43,11 @@ function goldK(gold: number): string {
 
 function goldDiffK(n: number): string {
   return (n >= 0 ? '+' : '−') + Math.abs(n / 1000).toFixed(1) + 'k'
+}
+
+// A readable chip label for a claim's evidence anchor (e.g. "stat:gold_at_24" → "gold at 24").
+function evidenceLabel(ref: { id: string; label?: string }): string {
+  return ref.label ?? ref.id.replace(/^(stat|marker):/, '').replace(/[_#]/g, ' ').trim()
 }
 
 function SectionLabel({ icon, children, count }: { icon?: string; children: React.ReactNode; count?: string }) {
@@ -195,8 +200,35 @@ function Breakdown({ b }: { b: BreakdownData }) {
   )
 }
 
-// ── FACTUAL: death map (US4) ─────────────────────────────────────────────────
-function DeathMap({ dm }: { dm: DeathMapData }) {
+// ── FACTUAL death map (US4) + per-death narration (pass 2) ───────────────────
+// The map positions are facts; the narration ("caught out", "why it mattered")
+// is Corky's read. Click a death to read its note — the narration is keyed by
+// `marker:death#n`, the same n the map plots.
+const DEATH_CHARACTER: Record<DeathNarration['character'], { label: string; tone: string }> = {
+  caught_out: { label: 'Caught out', tone: 'var(--loss)' },
+  overextended: { label: 'Overextended', tone: 'var(--warn)' },
+  fair_fight: { label: 'Fair fight', tone: 'var(--text-muted)' },
+  objective_trade: { label: 'Traded for an objective', tone: 'var(--gold-400)' },
+  unclear: { label: 'Unclear', tone: 'var(--text-faint)' },
+}
+
+function deathNarrationByN(narrations?: DeathNarration[]): Map<number, DeathNarration> {
+  const m = new Map<number, DeathNarration>()
+  for (const dn of narrations ?? []) {
+    const match = /death#(\d+)/.exec(dn.ref.id)
+    if (match) m.set(Number(match[1]), dn)
+  }
+  return m
+}
+
+function DeathMap({ dm, narrations }: { dm: DeathMapData; narrations?: DeathNarration[] }) {
+  const byN = deathNarrationByN(narrations)
+  const hasNarr = byN.size > 0
+  const [sel, setSel] = useState<number | null>(null)
+  useEffect(() => { setSel(null) }, [dm])
+
+  const selected = sel != null ? byN.get(sel) : undefined
+
   return (
     <Card padding={16}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
@@ -209,27 +241,57 @@ function DeathMap({ dm }: { dm: DeathMapData }) {
           A deathless game — nothing to map.
         </div>
       ) : (
-        <div style={{ display: 'flex', gap: 14 }}>
-          <div className="ck-minimap" style={{ width: 150, height: 150, flex: 'none' }}>
-            <div className="ck-minimap__grid" />
-            {dm.deaths.map(d => (
-              <span key={d.n} className="ck-minimap__death" style={{ left: d.xPct + '%', top: d.yPct + '%', background: 'var(--loss)' }}>
-                {d.n}
-              </span>
-            ))}
-          </div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
-            {dm.deaths.map(d => (
-              <div key={d.n} style={{ display: 'flex', gap: 9, alignItems: 'center' }}>
-                <span className="ck-death-n" style={{ background: 'var(--loss)' }}>{d.n}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>{fmtClock(d.tMin)}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)' }}>
-                  death {d.n} of {dm.count}
+        <>
+          <div style={{ display: 'flex', gap: 14 }}>
+            <div className="ck-minimap" style={{ width: 150, height: 150, flex: 'none' }}>
+              <div className="ck-minimap__grid" />
+              {dm.deaths.map(d => (
+                <span key={d.n} className="ck-minimap__death" onClick={hasNarr ? () => setSel(d.n) : undefined}
+                  style={{ left: d.xPct + '%', top: d.yPct + '%', background: 'var(--loss)', cursor: hasNarr ? 'pointer' : 'default', outline: sel === d.n ? '2px solid var(--gold-400)' : 'none' }}>
+                  {d.n}
                 </span>
-              </div>
-            ))}
+              ))}
+            </div>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {dm.deaths.map(d => {
+                const narr = byN.get(d.n)
+                const active = sel === d.n
+                const row = (
+                  <>
+                    <span className="ck-death-n" style={{ background: 'var(--loss)' }}>{d.n}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>{fmtClock(d.tMin)}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: narr ? DEATH_CHARACTER[narr.character].tone : 'var(--text-faint)' }}>
+                      {narr ? DEATH_CHARACTER[narr.character].label : `death ${d.n} of ${dm.count}`}
+                    </span>
+                  </>
+                )
+                return narr ? (
+                  <button key={d.n} onClick={() => setSel(active ? null : d.n)}
+                    style={{ display: 'flex', gap: 9, alignItems: 'center', padding: '4px 6px', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer', textAlign: 'left',
+                      background: active ? 'rgba(242,179,61,0.10)' : 'transparent' }}>
+                    {row}
+                  </button>
+                ) : (
+                  <div key={d.n} style={{ display: 'flex', gap: 9, alignItems: 'center', padding: '4px 6px' }}>{row}</div>
+                )
+              })}
+            </div>
           </div>
-        </div>
+          {hasNarr && (
+            <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 'var(--radius-md)', background: 'var(--surface-2, rgba(255,255,255,0.03))', borderLeft: '2px solid var(--gold-400)' }}>
+              {selected ? (
+                <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
+                  <strong style={{ color: DEATH_CHARACTER[selected.character].tone }}>{DEATH_CHARACTER[selected.character].label}</strong> — {selected.text}
+                </div>
+              ) : (
+                <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--text-faint)' }}>
+                  <Icon name="sparkles" size={13} style={{ color: 'var(--gold-400)', verticalAlign: 'middle', marginRight: 6 }} />
+                  Click a death to read Corky’s note on it.
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
     </Card>
   )
@@ -325,21 +387,18 @@ function CenteredNote({ children }: { children: React.ReactNode }) {
 }
 
 // --------------------------------------------------------------- the report
-export function CoachReport({ matchId, analyzed: analyzedProp, onAnalyzed }: {
-  matchId: string; analyzed: boolean; onAnalyzed: () => void
+export function CoachReport({ matchId, onAnalyzed }: {
+  matchId: string; analyzed?: boolean; onAnalyzed?: () => void
 }) {
   const { report, loading, notFound, error } = useMatchReport(matchId)
 
-  // AI analysis (mock layer — gated). Driven by the host (App) or inline buttons.
-  const [localAnalyzed, setLocalAnalyzed] = useState(!!analyzedProp)
-  const [analyzing, setAnalyzing] = useState(false)
-  useEffect(() => { setLocalAnalyzed(!!analyzedProp); setAnalyzing(false) }, [analyzedProp, matchId])
-  const analyzed = analyzedProp || localAnalyzed
-  function runAnalyze() {
-    if (analyzing || analyzed) return
-    setAnalyzing(true)
-    setTimeout(() => { setAnalyzing(false); setLocalAnalyzed(true); onAnalyzed() }, 1900)
-  }
+  // AI analysis ("Corky's read"). Restored on open from the stored read (no model
+  // call); runs the real four-pass pipeline on demand (spec 004).
+  const { analysis, state, run } = useMatchAnalysis(matchId)
+  const analyzing = state === 'running'
+  const runAnalyze = (): void => run()
+  // Notify the host once a read is in (keeps any host-level "analyzed" flag in sync).
+  useEffect(() => { if (analysis?.review) onAnalyzed?.() }, [analysis?.review, onAnalyzed])
 
   // Pin / save the game.
   const [pinned, setPinned] = useState(() => loadPins().includes(matchId))
@@ -361,9 +420,16 @@ export function CoachReport({ matchId, analyzed: analyzedProp, onAnalyzed }: {
   }
 
   const core = report.core
-  const r = core.win ? REPORT_WIN : REPORT_LOSS // mock AI layer, keyed by the real result
-  const sinceWins = r.sinceLast.filter(t => t.result === 'improved' || t.result === 'held').length
-  const sinceApplicable = r.sinceLast.filter(t => t.result !== 'not_applicable').length
+  // Each pass owns its own section; a section is bound only when its pass produced
+  // it (FR-002a). Unbuilt/failed/skipped sections fall back to the gated prompt.
+  const framing = analysis?.framing ?? null
+  const review = analysis?.review ?? null
+  const narration = analysis?.narration ?? null
+  const tasks = analysis?.tasks ?? null
+  const analyzed = !!review
+  const sinceLast = tasks?.sinceLast ?? []
+  const sinceWins = sinceLast.filter(t => t.result === 'improved' || t.result === 'held').length
+  const sinceApplicable = sinceLast.filter(t => t.result !== 'not_applicable').length
 
   const PinBtn = (
     <Button variant={pinned ? 'secondary' : 'ghost'} size="sm" onClick={togglePin}
@@ -378,14 +444,14 @@ export function CoachReport({ matchId, analyzed: analyzedProp, onAnalyzed }: {
       <VerdictCard result={core.win ? 'win' : 'loss'} champion={core.champion}
         duration={formatDuration(core.durationSec)} queue={queueLabel(core.queue)}
         eyebrow={analyzed ? 'Verdict' : 'Not analysed yet'}
-        tags={analyzed
-          ? <><Badge intent={r.headlineTagIntent}>{r.headlineTag}</Badge><Badge intent="neutral">{r.cohort.replace('Measured against ', 'vs ').replace('.', '')}</Badge>{PinBtn}</>
+        tags={analyzed && review
+          ? <>{framing && <Badge intent={framing.headlineTagIntent}>{framing.headlineTag}</Badge>}<Badge intent="neutral">{review.cohort}</Badge>{PinBtn}</>
           : <><Button variant="primary" size="sm" onClick={runAnalyze} disabled={analyzing}
                 iconLeft={<Icon name={analyzing ? 'refresh-cw' : 'sparkles'} size={15} className={analyzing ? 'ck-spin' : ''} />}>
                 {analyzing ? 'Analysing…' : 'Analyze this match'}
               </Button>{PinBtn}</>}>
-        {analyzed
-          ? <>{r.verdict.lead} <em>{r.verdict.gild}</em></>
+        {analyzed && review
+          ? <>{review.verdict.lead} {review.verdict.gild && <em>{review.verdict.gild}</em>}</>
           : <span style={{ color: 'var(--text-faint)' }}>
               <span className="ck-inline-dots" style={{ fontSize: 22 }}>· · · · ·</span>
               <span style={{ display: 'block', marginTop: 8, fontSize: 16, color: 'var(--text-muted)', fontWeight: 500 }}>
@@ -394,16 +460,31 @@ export function CoachReport({ matchId, analyzed: analyzedProp, onAnalyzed }: {
             </span>}
       </VerdictCard>
 
-      {/* Scoreline — facts */}
+      {/* Scoreline — facts; MVP caption is a framing decoration (pass 1). */}
       <section>
         <SectionLabel icon="bar-chart-3">This game</SectionLabel>
         <Scoreline core={core} />
+        {framing?.mvp && (
+          <div style={{ marginTop: 8, fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--text-muted)' }}>
+            <Icon name="sparkles" size={13} style={{ color: 'var(--gold-400)', verticalAlign: 'middle', marginRight: 6 }} />
+            MVP: <strong style={{ color: 'var(--text-secondary)' }}>{framing.mvp.champion}{framing.mvp.isYou ? ' (you)' : ''}</strong> — {framing.mvp.justification}
+          </div>
+        )}
       </section>
 
-      {/* Matchup — facts */}
+      {/* Matchup — facts; tips are a framing decoration (pass 1). */}
       <section>
         <SectionLabel icon="swords">Matchup</SectionLabel>
         <Matchup matchup={report.matchup} />
+        {framing && framing.matchupTips.length > 0 && (
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {framing.matchupTips.map((tip, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--text-muted)' }}>
+                <Icon name="sparkles" size={13} style={{ color: 'var(--gold-400)', flex: 'none', marginTop: 2 }} />{tip}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Your reflections — raw note, always available */}
@@ -431,27 +512,64 @@ export function CoachReport({ matchId, analyzed: analyzedProp, onAnalyzed }: {
           <Breakdown b={report.breakdown} />
         </div>
         {report.deathMap
-          ? <DeathMap dm={report.deathMap} />
+          ? <DeathMap dm={report.deathMap} narrations={narration?.deathNarrations} />
           : <UnavailableNote what="The death map" />}
       </section>
 
       {/* Turning points — AI read, gated */}
       <section>
-        <SectionLabel icon="map" count={analyzed ? `${r.turningPoints.length} moments` : undefined}>Turning points</SectionLabel>
-        {analyzed
+        <SectionLabel icon="map" count={narration ? `${narration.turningPoints.length} moments` : undefined}>Turning points</SectionLabel>
+        {narration
           ? <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {r.turningPoints.map((t, i) => <TurningPoint key={i} time={t.time} swing={t.swing} swingDir={t.dir} you={t.you} event={t.event} objective={t.objective} what={t.what} better={t.better} />)}
+              {narration.turningPoints.map((t, i) => <TurningPoint key={i} time={t.time} swing={t.swing} swingDir={t.dir} you={t.you} event={t.event} objective={t.objective} what={t.what} better={t.better} />)}
             </div>
-          : <GatedBlock title="The moments that decided the game" hint="Corky pinpoints each swing on the map and shows the better play." analyzing={analyzing} onAnalyze={runAnalyze} />}
+          : report.timelineAvailable
+            ? <GatedBlock title="The moments that decided the game" hint="Corky pinpoints each swing on the map and shows the better play." analyzing={analyzing} onAnalyze={runAnalyze} />
+            : <UnavailableNote what="Turning points" />}
+      </section>
+
+      {/* Overall analysis — the heavy read (pass 3): why won/lost + what to improve. */}
+      <section>
+        <SectionLabel icon="sparkles">Overall analysis</SectionLabel>
+        {review
+          ? <Card padding={18}>
+              <div className="eyebrow" style={{ fontSize: 11, marginBottom: 8, color: review.confidence === 'provisional' ? 'var(--warn)' : 'var(--gold-400)' }}>
+                {core.win ? 'Why you won' : 'Why you lost'} · {review.cohort}{review.confidence === 'provisional' ? ' · provisional' : ''}
+              </div>
+              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 15.5, lineHeight: 1.6, color: 'var(--text-primary)', margin: '0 0 14px' }}>
+                {review.verdict.lead} {review.verdict.gild && <em style={{ color: 'var(--text-secondary)' }}>{review.verdict.gild}</em>}
+              </p>
+              {review.improve && (
+                <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 'var(--radius-md)', background: 'rgba(242,179,61,0.08)', borderLeft: '2px solid var(--gold-400)', marginBottom: review.claims.length ? 14 : 0 }}>
+                  <Icon name="crosshair" size={15} style={{ color: 'var(--gold-400)', flex: 'none', marginTop: 2 }} />
+                  <div>
+                    <div className="eyebrow" style={{ fontSize: 10.5, marginBottom: 3 }}>What to improve</div>
+                    <div style={{ fontFamily: 'var(--font-sans)', fontSize: 14, lineHeight: 1.55, color: 'var(--text-secondary)' }}>{review.improve}</div>
+                  </div>
+                </div>
+              )}
+              {review.claims.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {review.claims.map((c, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 9, alignItems: 'baseline', fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text-secondary)' }}>
+                      <Icon name="check" size={13} style={{ color: 'var(--gold-400)', flex: 'none', alignSelf: 'center' }} />
+                      <span style={{ flex: 1 }}>{c.text}</span>
+                      <Badge intent="neutral">{evidenceLabel(c.ref)}</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          : <GatedBlock title="Corky’s read on why this game went the way it did" hint="The heavy analysis: what won or lost the game, and the one thing to change." analyzing={analyzing} onAnalyze={runAnalyze} />}
       </section>
 
       {/* Next-game focus — AI read, gated */}
       <section>
         <SectionLabel icon="crosshair">Next-game focus</SectionLabel>
-        {analyzed
+        {tasks
           ? <>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {r.nextFocus.map((t, i) => <FocusTask key={i} {...t} />)}
+                {tasks.standing.map((t) => <FocusTask key={t.id} description={t.description} metric={t.metric} comparator={t.comparator} target={t.target} scope={t.scope} result="pending" />)}
               </div>
               <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--text-faint)', marginTop: 12, display: 'flex', alignItems: 'center', gap: 7 }}>
                 <Icon name="sparkles" size={13} style={{ color: 'var(--gold-400)' }} />
@@ -464,18 +582,24 @@ export function CoachReport({ matchId, analyzed: analyzedProp, onAnalyzed }: {
       {/* Since last game — AI read, gated */}
       <section>
         <SectionLabel icon="history">Since last game</SectionLabel>
-        {analyzed
-          ? <Card padding={16}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        {tasks
+          ? tasks.firstTime
+            ? <Card padding={16}>
                 <span style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--text-secondary)' }}>
-                  You held <strong style={{ color: 'var(--text-primary)' }}>{sinceWins} of {sinceApplicable}</strong> focus tasks from last game.
+                  This is your first analysed game — Corky starts tracking your focus tasks from here.
                 </span>
-                <Badge intent={sinceWins >= sinceApplicable ? 'win' : 'warn'} style={{ marginLeft: 'auto' }}>{sinceWins >= sinceApplicable ? 'On track' : 'Slipped one'}</Badge>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {r.sinceLast.map((t, i) => <FocusTask key={i} {...t} />)}
-              </div>
-            </Card>
+              </Card>
+            : <Card padding={16}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <span style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--text-secondary)' }}>
+                    You held <strong style={{ color: 'var(--text-primary)' }}>{sinceWins} of {sinceApplicable}</strong> focus tasks from last game.
+                  </span>
+                  <Badge intent={sinceWins >= sinceApplicable ? 'win' : 'warn'} style={{ marginLeft: 'auto' }}>{sinceWins >= sinceApplicable ? 'On track' : 'Slipped one'}</Badge>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {tasks.sinceLast.map((t, i) => <FocusTask key={i} {...t} />)}
+                </div>
+              </Card>
           : <GatedBlock title="How you did on last game’s focus tasks" hint="Analysis checks this game against the tasks Corky set you last time." analyzing={analyzing} onAnalyze={runAnalyze} />}
       </section>
 

@@ -87,6 +87,40 @@ export function runMigrations(db: Database.Database): void {
       PRIMARY KEY (task_id, evaluating_match_id)
     );
 
+    -- The full AI match analysis ("Corky's read"), one row per match (spec 004).
+    -- Restored on report open with no model call (FR-027). Re-run replaces it; a
+    -- partial run never overwrites a stored full read (guarded in the repo).
+    CREATE TABLE IF NOT EXISTS match_analyses (
+      match_id    TEXT PRIMARY KEY,
+      created_at  INTEGER NOT NULL,
+      light_model TEXT NOT NULL,
+      heavy_model TEXT NOT NULL,
+      status      TEXT NOT NULL,
+      json        TEXT NOT NULL
+    );
+
+    -- The player's standing, global, per-user focus tasks (1–3 active) — spec 004
+    -- US4. Distinct from the legacy per-match focus_tasks; evolved over time
+    -- (hold/retire/add) rather than regenerated per game.
+    CREATE TABLE IF NOT EXISTS standing_focus_tasks (
+      id              TEXT PRIMARY KEY,
+      puuid           TEXT NOT NULL,
+      description     TEXT NOT NULL,
+      metric          TEXT NOT NULL,
+      comparator      TEXT NOT NULL,
+      target          REAL NOT NULL,
+      scope           TEXT NOT NULL,
+      champion        TEXT,
+      role            TEXT,
+      status          TEXT NOT NULL,
+      source_match_id TEXT NOT NULL,
+      created_at      INTEGER NOT NULL,
+      updated_at      INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_standing_tasks_puuid_status
+      ON standing_focus_tasks (puuid, status);
+
     -- Latest Quick Analysis per account, so it survives resync and app restart.
     CREATE TABLE IF NOT EXISTS session_analyses (
       puuid      TEXT PRIMARY KEY,

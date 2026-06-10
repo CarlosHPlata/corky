@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   IpcApi, MatchSummary, MatchPage, MatchPageRequest, MatchReport,
   SummonerProfile, LpSnapshot, CoachReport, SessionAnalysis,
-  SessionGoal, SessionGoalInput
+  SessionGoal, SessionGoalInput, MatchAnalysis, AnalyzeMatchOptions
 } from '../shared/types'
 
 const api: IpcApi = {
@@ -15,7 +15,10 @@ const api: IpcApi = {
   syncProfile: () => ipcRenderer.invoke('summoner:sync'),
   getSummonerProfile: (): Promise<SummonerProfile | null> => ipcRenderer.invoke('summoner:get'),
   getLpHistory: (): Promise<LpSnapshot[]> => ipcRenderer.invoke('summoner:lp-history'),
-  analyzeMatch: (matchId: string) => ipcRenderer.invoke('match:analyze', matchId),
+  analyzeMatch: (matchId: string, opts?: AnalyzeMatchOptions): Promise<MatchAnalysis> =>
+    ipcRenderer.invoke('analysis:match:run', matchId, opts),
+  getMatchAnalysis: (matchId: string): Promise<MatchAnalysis | null> =>
+    ipcRenderer.invoke('analysis:match:get', matchId),
   getCoachReport: (matchId: string): Promise<CoachReport | null> =>
     ipcRenderer.invoke('report:get', matchId),
   runSessionAnalysis: (): Promise<SessionAnalysis> => ipcRenderer.invoke('analysis:session:run'),
