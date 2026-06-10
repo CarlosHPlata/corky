@@ -6,7 +6,6 @@ import { SqliteReportRepository } from '../adapters/driven/sqlite/SqliteReportRe
 import { SqliteSessionAnalysisRepository } from '../adapters/driven/sqlite/SqliteSessionAnalysisRepository'
 import { SqliteSessionGoalRepository } from '../adapters/driven/sqlite/SqliteSessionGoalRepository'
 import { SqliteSemanticMemory } from '../adapters/driven/sqlite/SqliteSemanticMemory'
-import { SqliteChatTranscriptRepository } from '../adapters/driven/sqlite/SqliteChatTranscriptRepository'
 import { SqliteChatSessionRepository } from '../adapters/driven/sqlite/SqliteChatSessionRepository'
 import { SqliteReflectionRepository } from '../adapters/driven/sqlite/SqliteReflectionRepository'
 import { RiotApiClient } from '../adapters/driven/riot/RiotApiClient'
@@ -32,8 +31,6 @@ import { CoachChat } from '../application/commands/CoachChat'
 import { FinalizeReflection } from '../application/commands/FinalizeReflection'
 import { GetStandingTasks } from '../application/queries/GetStandingTasks'
 import { GetProgress } from '../application/queries/GetProgress'
-import { GetChatTranscript } from '../application/queries/GetChatTranscript'
-import { SaveChatTranscript } from '../application/commands/SaveChatTranscript'
 import { GetChatSessions } from '../application/queries/GetChatSessions'
 import { SaveChatSession } from '../application/commands/SaveChatSession'
 import { ResolveProposal } from '../application/commands/ResolveProposal'
@@ -57,7 +54,6 @@ export function buildContainer() {
   const sessionAnalysisRepo = new SqliteSessionAnalysisRepository(db)
   const sessionGoalRepo = new SqliteSessionGoalRepository(db)
   const semanticMemory = new SqliteSemanticMemory(db)
-  const chatTranscriptRepo = new SqliteChatTranscriptRepository(db)
   const chatSessionRepo = new SqliteChatSessionRepository(db)
   const reflectionRepo = new SqliteReflectionRepository(db)
   const coachingConfigRepo = new SqliteCoachingConfigRepository(db)
@@ -158,8 +154,6 @@ export function buildContainer() {
   )
   const getStandingTasks = new GetStandingTasks(matchRepo, reportRepo)
   const getProgress = new GetProgress(matchRepo, reportRepo, semanticMemory)
-  const getChatTranscript = new GetChatTranscript(chatTranscriptRepo)
-  const saveChatTranscript = new SaveChatTranscript(chatTranscriptRepo)
   const getChatSessions = new GetChatSessions(chatSessionRepo)
   const saveChatSession = new SaveChatSession(chatSessionRepo)
   const getSessionAnalysis = new GetSessionAnalysis(matchRepo, sessionAnalysisRepo)
@@ -195,9 +189,6 @@ export function buildContainer() {
     finalizeReflection,
     getStandingTasks,
     getProgress,
-    chatTranscriptRepo,
-    getChatTranscript,
-    saveChatTranscript,
     chatSessionRepo,
     reflectionRepo,
     getChatSessions,

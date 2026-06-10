@@ -421,6 +421,26 @@ code, kbd, samp, pre { font-family: var(--font-mono); }
 }
 .ckc-chip:hover { border-color: var(--accent); color: var(--text-primary); background: var(--bg-card-raised); }
 
+/* ---------- Chat session switcher (spec 005) ---------------- */
+.ckc-sessions {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-bottom: 1px solid var(--border-subtle);
+}
+.ckc-sessions__select {
+  flex: 1; min-width: 0; height: 28px; padding: 0 8px;
+  font-family: var(--font-sans); font-size: 12px; color: var(--text-secondary);
+  background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+}
+.ckc-sessions__select:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.ckc-sessions__new {
+  display: inline-flex; align-items: center; gap: 5px; flex: none; height: 28px; padding: 0 10px;
+  font-family: var(--font-sans); font-size: 12px; color: var(--text-secondary); cursor: pointer;
+  background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-pill);
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.ckc-sessions__new:hover:not(:disabled) { border-color: var(--accent); color: var(--text-primary); }
+.ckc-sessions__new:disabled { opacity: 0.45; cursor: default; }
+
 /* ---------- Proposal card (spec 005, confirm-first) -------- */
 .ckp-card {
   margin-top: 8px; max-width: 92%;

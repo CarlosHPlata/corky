@@ -627,17 +627,6 @@ export interface IpcApi {
    * records, what Corky is working on, and banked wins. No model call;
    * drives the Home "Progress" card. */
   getProgress: () => Promise<ProgressSummary>
-  /** The stored coaching session for a match — chat turns plus the finalized
-   * reflection (null until written) — or null when nothing was ever saved. */
-  getChatTranscript: (
-    matchId: string
-  ) => Promise<{ turns: ChatTurn[]; reflection: string | null } | null>
-  /** Persist the chat turns for a match's coaching session; any finalized
-   * reflection already stored is preserved. */
-  saveChatTranscript: (matchId: string, turns: ChatTurn[]) => Promise<void>
-  /** Persist the (player-edited or cleaned) reflection text for a match;
-   * stored turns are preserved. Finalize also persists server-side. */
-  saveChatReflection: (matchId: string, reflection: string) => Promise<void>
   /** Switcher listing of a match's chat sessions, newest first (spec 005). */
   listChatSessions: (matchId: string) => Promise<ChatSessionMeta[]>
   /** One full session (turns incl. proposals), or null when missing/unreadable. */

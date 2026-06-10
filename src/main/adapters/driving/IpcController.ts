@@ -14,8 +14,6 @@ import type { CoachChat } from '../../application/commands/CoachChat'
 import type { FinalizeReflection } from '../../application/commands/FinalizeReflection'
 import type { GetStandingTasks } from '../../application/queries/GetStandingTasks'
 import type { GetProgress } from '../../application/queries/GetProgress'
-import type { GetChatTranscript } from '../../application/queries/GetChatTranscript'
-import type { SaveChatTranscript } from '../../application/commands/SaveChatTranscript'
 import type { GetChatSessions } from '../../application/queries/GetChatSessions'
 import type { SaveChatSession } from '../../application/commands/SaveChatSession'
 import type { ResolveProposal } from '../../application/commands/ResolveProposal'
@@ -23,7 +21,7 @@ import type { SaveReflection } from '../../application/commands/SaveReflection'
 import type { DeleteReflection } from '../../application/commands/DeleteReflection'
 import type { ListReflections } from '../../application/queries/ListReflections'
 import type { ResolveProposalInput, SaveReflectionInput } from '@shared/types'
-import type { ChatTranscriptRepository } from '../../application/ports/ChatTranscriptRepository'
+import type { ReflectionRepository } from '../../application/ports/ReflectionRepository'
 import type { AnalyzeMatchOptions, ChatTurn } from '@shared/types'
 import type { GetSessionAnalysis } from '../../application/queries/GetSessionAnalysis'
 import type { AnalyzeSession } from '../../application/commands/AnalyzeSession'
@@ -50,17 +48,16 @@ export function registerIpcHandlers(deps: {
   finalizeReflection: FinalizeReflection
   getStandingTasks: GetStandingTasks
   getProgress: GetProgress
-  getChatTranscript: GetChatTranscript
-  saveChatTranscript: SaveChatTranscript
   getChatSessions: GetChatSessions
   saveChatSession: SaveChatSession
   resolveProposal: ResolveProposal
   saveReflection: SaveReflection
   deleteReflection: DeleteReflection
   listReflections: ListReflections
-  /** Direct repo dep: the finalize handler and the reflection-save channel
-   * persist the written reflection alongside the transcript. */
-  chatTranscriptRepo: ChatTranscriptRepository
+  /** Direct repo dep: the finalize handler stores Corky's written reflection
+   * as a coach-authored row in the reflections store (until US5 replaces the
+   * finalize flow with a summarize proposal). */
+  reflectionRepo: ReflectionRepository
   getSessionAnalysis: GetSessionAnalysis
   analyzeSession: AnalyzeSession
   getSessionGoal: GetSessionGoal
@@ -133,9 +130,20 @@ export function registerIpcHandlers(deps: {
     'coach:reflection:finalize',
     async (_event, matchId: string, messages: ChatTurn[]) => {
       const outcome = await deps.finalizeReflection.execute(matchId, messages)
-      // The written reflection is durable coaching data — persist it with the
-      // transcript so the session survives restarts (renderer no longer owns it).
-      if (outcome.reflection) deps.chatTranscriptRepo.saveReflection(matchId, outcome.reflection)
+      // The written reflection is durable coaching data — it lands in the
+      // reflections store (spec 005) so the Reflections panel shows it.
+      if (outcome.reflection) {
+        const at = Date.now()
+        deps.reflectionRepo.upsert({
+          id: `${matchId}-refl-${at.toString(36)}-1`,
+          matchId,
+          text: outcome.reflection,
+          refs: [],
+          source: 'coach',
+          createdAt: at,
+          updatedAt: at
+        })
+      }
       return outcome
     }
   )
@@ -146,18 +154,6 @@ export function registerIpcHandlers(deps: {
 
   ipcMain.handle('progress:get', () => {
     return deps.getProgress.execute()
-  })
-
-  ipcMain.handle('chat:transcript:get', (_event, matchId: string) => {
-    return deps.getChatTranscript.execute(matchId)
-  })
-
-  ipcMain.handle('chat:transcript:save', (_event, matchId: string, turns: ChatTurn[]) => {
-    deps.saveChatTranscript.execute(matchId, turns)
-  })
-
-  ipcMain.handle('chat:reflection:save', (_event, matchId: string, reflection: string) => {
-    deps.chatTranscriptRepo.saveReflection(matchId, reflection)
   })
 
   ipcMain.handle('chat:sessions:list', (_event, matchId: string) => {

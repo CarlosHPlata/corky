@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ChatTurn, EvidenceRef, ResolveProposalOutcome } from '@shared/types'
+import type { ChatSessionMeta, ChatTurn, EvidenceRef, ResolveProposalOutcome } from '@shared/types'
 
-// Coaching chat session state (spec 005). Single-session mode for now: the
-// newest stored session of the match is resumed, or a fresh draft is minted.
-// US3 extends this hook with the metas listing + switcher + "New chat".
+// Coaching chat sessions of one match (spec 005, Claude-style). The newest
+// stored session is resumed on open; "New chat" starts a renderer-only DRAFT
+// (opener turn, no row) and the switcher moves between stored threads.
 //
-// Lazy creation (FR-020): a draft session becomes a SQLite row only once a
-// player turn exists — abandoning an untouched chat leaves nothing behind.
+// Lazy creation (FR-020): a draft becomes a SQLite row only once a player turn
+// exists — abandoning an untouched chat leaves nothing behind.
+//
+// Context note: every session's coach context is rebuilt server-side per call
+// (match facts + read + standing tasks + ALL reflections + memory), so a fresh
+// session starts factually warm with a clean transcript (FR-018).
 
 function mintSessionId(matchId: string): string {
   return `${matchId}-sess-${Date.now().toString(36)}`
@@ -29,93 +33,95 @@ function loadLegacyReflection(key: string): string {
   return ''
 }
 
-export interface ChatSessionApi {
+export interface ChatSessionsApi {
   msgs: ChatTurn[]
-  /** False until this match's stored session finished loading — sends and
-   * persistence stay blocked so the opener can never clobber a stored thread. */
+  /** Stored sessions of this match, newest first (drafts are not listed until
+   * their first player turn persists them). */
+  metas: ChatSessionMeta[]
+  /** The active session id — a stored id or the current draft's. */
+  activeId: string
+  /** True while the active session is a never-persisted draft. */
+  isDraft: boolean
+  /** False until the active session finished loading — sends and persistence
+   * stay blocked so the opener can never clobber a stored thread. */
   hydrated: boolean
   thinking: boolean
   resolving: boolean
-  /** Legacy finalized reflection (chat_transcripts) — owned here until US5. */
-  reflection: string
-  setReflection: (text: string) => void
   send: (text: string, refs?: EvidenceRef[]) => Promise<void>
   resolve: (proposalId: string, decision: 'accept' | 'reject') => Promise<ResolveProposalOutcome | null>
-  /** Append turns produced outside `send` (e.g. the finalize flow). */
-  appendTurn: (turn: ChatTurn) => void
+  /** Switch to a stored session (no-op for the active one). */
+  switchTo: (sessionId: string) => Promise<void>
+  /** Start a fresh draft session (reuses the current draft if still untouched). */
+  newChat: () => void
 }
 
-export function useChatSession(matchId: string, opener: ChatTurn): ChatSessionApi {
+export function useChatSessions(matchId: string, opener: ChatTurn): ChatSessionsApi {
   const [msgs, setMsgs] = useState<ChatTurn[]>([opener])
-  const [reflection, setReflection] = useState('')
+  const [metas, setMetas] = useState<ChatSessionMeta[]>([])
+  const [activeId, setActiveId] = useState<string>(() => mintSessionId(matchId))
+  const [isDraft, setIsDraft] = useState(true)
   const [thinking, setThinking] = useState(false)
   const [resolving, setResolving] = useState(false)
   const [hydrated, setHydrated] = useState(false)
-  const sessionIdRef = useRef<string>(mintSessionId(matchId))
+  const sessionIdRef = useRef<string>(activeId)
   const hydratedFor = useRef<string | null>(null)
 
+  function activate(sessionId: string, turns: ChatTurn[], draft: boolean): void {
+    sessionIdRef.current = sessionId
+    setActiveId(sessionId)
+    setIsDraft(draft)
+    setMsgs(turns)
+  }
+
   // Reset + hydrate when the game changes: resume the newest stored session,
-  // adopt the legacy localStorage transcript when no session exists yet, or
-  // start a fresh draft.
+  // adopt the legacy localStorage transcript/reflection when nothing exists
+  // yet, or start a fresh draft.
   useEffect(() => {
     hydratedFor.current = null
     setHydrated(false)
-    setMsgs([opener]); setReflection(''); setThinking(false); setResolving(false)
-    sessionIdRef.current = mintSessionId(matchId)
+    setMetas([])
+    setThinking(false); setResolving(false)
+    activate(mintSessionId(matchId), [opener], true)
     const chatKey = 'ck-chat-' + matchId
     const reflectKey = 'ck-postreflect-' + matchId
     let alive = true
     void (async () => {
-      let turns: ChatTurn[] | null = null
       try {
-        const metas = await window.api.listChatSessions(matchId)
-        if (metas.length > 0) {
-          const stored = await window.api.getChatSession(metas[0].id)
-          // Unreadable stored turns must NOT arm the save path — an "empty"
-          // read would let the opener overwrite a real transcript.
-          if (!stored) return
-          sessionIdRef.current = stored.id
-          turns = stored.turns.length > 0 ? stored.turns : null
-        } else {
+        let stored = await window.api.listChatSessions(matchId)
+        if (stored.length === 0) {
+          // Adopt the pre-005 renderer-local transcript as the first session;
+          // the deterministic id keeps this idempotent with the migration.
           const legacyTurns = loadLegacyChat(chatKey)
           if (legacyTurns) {
-            // Deterministic id keeps this idempotent with the schema migration.
-            const legacyId = `${matchId}-sess-legacy`
             try {
-              await window.api.saveChatSession(matchId, legacyId, legacyTurns)
+              const meta = await window.api.saveChatSession(matchId, `${matchId}-sess-legacy`, legacyTurns)
               localStorage.removeItem(chatKey)
-              sessionIdRef.current = legacyId
-              turns = legacyTurns
+              stored = [meta]
             } catch { /* key stays put; adoption retries next open */ }
           }
+        }
+        if (!alive) return
+        setMetas(stored)
+        if (stored.length > 0) {
+          const newest = await window.api.getChatSession(stored[0].id)
+          if (!alive) return
+          // Unreadable stored turns must NOT arm the save path — an "empty"
+          // read would let the opener overwrite a real transcript.
+          if (!newest) return
+          activate(newest.id, newest.turns.length > 0 ? newest.turns : [opener], false)
         }
       } catch {
         return // transient load failure: stay unhydrated, reopening retries
       }
-      // Legacy finalized reflection — still served from chat_transcripts until
-      // the Reflections panel (US2) and summarize flow (US5) replace it.
-      let refl = ''
-      try {
-        const transcript = await window.api.getChatTranscript(matchId)
-        refl = transcript?.reflection ?? ''
-        if (!refl) {
-          const legacyRefl = loadLegacyReflection(reflectKey)
-          if (legacyRefl) {
-            // Adopt into the reflections store (spec 005) — the deterministic
-            // legacy id makes repeats no-ops, same as the schema migration.
-            try {
-              await window.api.saveReflection({
-                matchId, id: `${matchId}-refl-legacy`, text: legacyRefl, refs: []
-              })
-              localStorage.removeItem(reflectKey)
-              refl = legacyRefl
-            } catch { /* retries next open */ }
-          }
-        }
-      } catch { /* reflection is non-blocking */ }
+      // Pre-005 renderer-local reflection → the reflections store (US2).
+      const legacyRefl = loadLegacyReflection(reflectKey)
+      if (legacyRefl) {
+        try {
+          await window.api.saveReflection({ matchId, id: `${matchId}-refl-legacy`, text: legacyRefl, refs: [] })
+          localStorage.removeItem(reflectKey)
+        } catch { /* retries next open */ }
+      }
       if (!alive) return
-      setMsgs(turns || [opener])
-      setReflection(refl)
       hydratedFor.current = matchId
       setHydrated(true)
     })()
@@ -127,27 +133,44 @@ export function useChatSession(matchId: string, opener: ChatTurn): ChatSessionAp
   useEffect(() => {
     if (hydratedFor.current !== matchId) return
     if (!msgs.some((m) => m.role === 'user')) return
-    window.api.saveChatSession(matchId, sessionIdRef.current, msgs).catch(() => { /* next change retries */ })
+    const sid = sessionIdRef.current
+    window.api
+      .saveChatSession(matchId, sid, msgs)
+      .then((meta) => {
+        setIsDraft(false)
+        setMetas((cur) => {
+          const i = cur.findIndex((m) => m.id === meta.id)
+          if (i === -1) return [meta, ...cur]
+          const next = [...cur]
+          next[i] = meta
+          return next
+        })
+      })
+      .catch(() => { /* next change retries */ })
   }, [msgs, matchId])
+
+  /** True when a continuation may still apply: same match AND same session. */
+  function stillCurrent(sid: string): boolean {
+    return hydratedFor.current === matchId && sessionIdRef.current === sid
+  }
 
   async function send(text: string, refs?: EvidenceRef[]): Promise<void> {
     const trimmed = text.trim()
     if (!trimmed || thinking || hydratedFor.current !== matchId) return
+    const sid = sessionIdRef.current
     const next = msgs.concat(refs && refs.length ? { role: 'user', text: trimmed, refs } : { role: 'user', text: trimmed })
     setMsgs(next)
     setThinking(true)
     try {
-      const reply = await window.api.coachChat(matchId, sessionIdRef.current, next)
-      // Belt over the key braces: a continuation for another match's session
-      // must never touch this transcript.
-      if (hydratedFor.current !== matchId) return
+      const reply = await window.api.coachChat(matchId, sid, next)
+      if (!stillCurrent(sid)) return
       const assistant: ChatTurn = reply.proposalTurn ?? { role: 'assistant', text: reply.reply }
       setMsgs((cur) => cur.concat(assistant))
     } catch {
-      if (hydratedFor.current !== matchId) return
+      if (!stillCurrent(sid)) return
       setMsgs((cur) => cur.concat({ role: 'assistant', text: "I couldn't reach my notes just now — try that again in a sec." }))
     } finally {
-      setThinking(false)
+      if (stillCurrent(sid)) setThinking(false)
     }
   }
 
@@ -156,34 +179,42 @@ export function useChatSession(matchId: string, opener: ChatTurn): ChatSessionAp
     decision: 'accept' | 'reject'
   ): Promise<ResolveProposalOutcome | null> {
     if (resolving || hydratedFor.current !== matchId) return null
+    const sid = sessionIdRef.current
     setResolving(true)
     try {
-      const outcome = await window.api.resolveProposal({
-        matchId,
-        sessionId: sessionIdRef.current,
-        proposalId,
-        decision
-      })
-      if (hydratedFor.current !== matchId) return outcome
-      setMsgs((cur) =>
-        cur.map((t) =>
-          t.proposal?.id === proposalId
-            ? { ...t, proposal: { ...t.proposal, resolution: outcome.resolution, resolvedAt: Date.now() } }
-            : t
+      const outcome = await window.api.resolveProposal({ matchId, sessionId: sid, proposalId, decision })
+      if (stillCurrent(sid)) {
+        setMsgs((cur) =>
+          cur.map((t) =>
+            t.proposal?.id === proposalId
+              ? { ...t, proposal: { ...t.proposal, resolution: outcome.resolution, resolvedAt: Date.now() } }
+              : t
+          )
         )
-      )
+      }
       return outcome
     } catch {
       return null // card stays pending; player can retry
     } finally {
-      setResolving(false)
+      if (stillCurrent(sid)) setResolving(false)
     }
   }
 
-  function appendTurn(turn: ChatTurn): void {
+  async function switchTo(sessionId: string): Promise<void> {
+    if (sessionId === sessionIdRef.current || hydratedFor.current !== matchId) return
+    const stored = await window.api.getChatSession(sessionId)
     if (hydratedFor.current !== matchId) return
-    setMsgs((cur) => cur.concat(turn))
+    if (!stored) return // unreadable: stay where we are rather than show empty
+    setThinking(false); setResolving(false)
+    activate(stored.id, stored.turns.length > 0 ? stored.turns : [opener], false)
   }
 
-  return { msgs, hydrated, thinking, resolving, reflection, setReflection, send, resolve, appendTurn }
+  function newChat(): void {
+    if (hydratedFor.current !== matchId) return
+    if (isDraft && !msgs.some((m) => m.role === 'user')) return // reuse untouched draft
+    setThinking(false); setResolving(false)
+    activate(mintSessionId(matchId), [opener], true)
+  }
+
+  return { msgs, metas, activeId, isDraft, hydrated, thinking, resolving, send, resolve, switchTo, newChat }
 }
