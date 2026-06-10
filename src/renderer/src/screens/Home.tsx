@@ -5,7 +5,6 @@ import { Button } from '../components/core/Button'
 import { Avatar } from '../components/core/Avatar'
 import { ProgressBar } from '../components/core/ProgressBar'
 import { EvidenceChip } from '../components/coaching/EvidenceChip'
-import { FocusTask } from '../components/coaching/FocusTask'
 import { ChampAvatar } from '../components/ChampAvatar'
 import { GoalNotes } from '../components/GoalNotes'
 import { Icon } from '../components/Icon'
@@ -134,50 +133,7 @@ function Hero({ profile, matches, net, onNav }: {
   )
 }
 
-// ── NextFocus: the player's standing focus tasks (global, kept current by the
-//    analysis pass + reflection chat — spec 004). Empty until the first analysis. ──
-function NextFocus({ onOpen, latestMatchId }: { onOpen: (matchId: string) => void; latestMatchId?: string }) {
-  const { tasks, loading } = useStandingTasks()
-  const hasTasks = tasks.length > 0
-  return (
-    <Card accent="objective" padding={18}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 13, marginBottom: hasTasks ? 14 : 0 }}>
-        <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 'var(--radius-md)', display: 'grid', placeItems: 'center', background: 'var(--objective-soft)' }}>
-          <Icon name="crosshair" size={20} style={{ color: 'var(--violet-400)' }} />
-        </span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18, color: 'var(--text-primary)', lineHeight: 1.15 }}>Next-game focus</span>
-            {hasTasks && <Badge intent="objective" dot>{tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}</Badge>}
-          </div>
-          <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.55, margin: '4px 0 0' }}>
-            {hasTasks
-              ? 'Your standing focus. Corky checks these automatically after each game and keeps them current.'
-              : loading
-                ? 'Loading your focus tasks…'
-                : 'No focus tasks yet. Analyse a game and Corky sets your next-game focus here.'}
-          </p>
-        </div>
-        <Button variant="ghost" size="sm" onClick={() => latestMatchId && onOpen(latestMatchId)}
-          disabled={!latestMatchId}
-          iconRight={<Icon name="chevron-right" size={15} />} style={{ flex: 'none' }}>
-          Last report
-        </Button>
-      </div>
-      {hasTasks && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {tasks.map((t) => (
-            <FocusTask key={t.id} description={t.description} metric={t.metric}
-              comparator={t.comparator} target={t.target} scope={t.scope} result="pending" />
-          ))}
-        </div>
-      )}
-    </Card>
-  )
-}
-
-// ── Progress: deterministic read of the coaching loop closing — standing-task
-//    track records, what Corky is working on, and banked wins. Zero-LLM. ──────
+// ── FocusCard: standing tasks + their track record + working-on + wins ─────────
 const RESULT_VISUAL: Record<TaskEvaluationResult, { color: string; label: string; faint?: boolean }> = {
   improved: { color: 'var(--win)', label: 'Improved' },
   held: { color: 'var(--text-muted)', label: 'Held' },
@@ -186,7 +142,6 @@ const RESULT_VISUAL: Record<TaskEvaluationResult, { color: string; label: string
 }
 
 function ResultDots({ recent }: { recent: TaskEvaluationResult[] }) {
-  // `recent` arrives newest-first; show oldest → newest like the form pips.
   const shown = [...recent].reverse()
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flex: 'none' }}>
@@ -204,23 +159,31 @@ function ResultDots({ recent }: { recent: TaskEvaluationResult[] }) {
 }
 
 function ProgressBlockLabel({ children }: { children: React.ReactNode }) {
-  return <div className="eyebrow" style={{ fontSize: 10.5, margin: '0 0 7px' }}>{children}</div>
+  return <div className="eyebrow" style={{ fontSize: 10.5, margin: '16px 0 7px', paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>{children}</div>
 }
 
-function Progress() {
-  const { progress, loading } = useProgress()
+function FocusCard({ onOpen, latestMatchId }: { onOpen: (matchId: string) => void; latestMatchId?: string }) {
+  const { tasks, loading: tasksLoading } = useStandingTasks()
+  const { progress, loading: progressLoading } = useProgress()
+  const loading = tasksLoading || progressLoading
+  const hasTasks = tasks.length > 0
   const p = progress
-  const hasContent = !!p && (p.tasks.length > 0 || p.working.length > 0 || p.wins.length > 0)
+  const hasWorking = !!p && p.working.length > 0
+  const hasWins = !!p && p.wins.length > 0
+
+  // join standing tasks with their progress history by id
+  const progressByTaskId = Object.fromEntries((p?.tasks ?? []).map(t => [t.taskId, t]))
 
   return (
-    <Card accent="win" padding={18}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 13, marginBottom: hasContent ? 16 : 0 }}>
-        <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 'var(--radius-md)', display: 'grid', placeItems: 'center', background: 'var(--win-soft)' }}>
-          <Icon name="trending-up" size={20} style={{ color: 'var(--win)' }} />
+    <Card accent="objective" padding={18}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 13, marginBottom: hasTasks ? 14 : 0 }}>
+        <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 'var(--radius-md)', display: 'grid', placeItems: 'center', background: 'var(--objective-soft)' }}>
+          <Icon name="crosshair" size={20} style={{ color: 'var(--violet-400)' }} />
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18, color: 'var(--text-primary)', lineHeight: 1.15 }}>Progress</span>
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18, color: 'var(--text-primary)', lineHeight: 1.15 }}>Focus</span>
+            {hasTasks && <Badge intent="objective" dot>{tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}</Badge>}
             {!!p && p.analysedGames > 0 && (
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-faint)' }}>
                 {p.analysedGames} {p.analysedGames === 1 ? 'game' : 'games'} analysed
@@ -228,49 +191,52 @@ function Progress() {
             )}
           </div>
           <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.55, margin: '4px 0 0' }}>
-            {hasContent
-              ? 'How your focus tasks are trending, what Corky is working on with you, and the wins already banked.'
+            {hasTasks
+              ? 'Your standing focus. Corky checks these after each game and keeps them current.'
               : loading
-                ? 'Loading your progress…'
-                : 'Analyse a game to start tracking progress.'}
+                ? 'Loading…'
+                : 'No focus tasks yet. Analyse a game and Corky sets your focus here.'}
           </p>
         </div>
+        <Button variant="ghost" size="sm" onClick={() => latestMatchId && onOpen(latestMatchId)}
+          disabled={!latestMatchId}
+          iconRight={<Icon name="chevron-right" size={15} />} style={{ flex: 'none' }}>
+          Last report
+        </Button>
       </div>
 
-      {hasContent && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {p.tasks.length > 0 && (
-            <div>
-              <ProgressBlockLabel>Focus tasks</ProgressBlockLabel>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {p.tasks.map((t, i) => (
-                  <div key={t.taskId} style={{
-                    display: 'flex', alignItems: 'center', gap: 11, padding: '9px 2px',
-                    borderBottom: i === p.tasks.length - 1 ? 'none' : '1px solid var(--border-subtle)',
-                  }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.description}</div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>{t.metric}</div>
-                    </div>
-                    {t.recent.length === 0
-                      ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', flex: 'none' }}>not yet measured</span>
-                      : <ResultDots recent={t.recent} />}
-                    {t.streak >= 2 && (
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--win)', flex: 'none' }}>
-                        {t.streak} in a row
-                      </span>
-                    )}
-                  </div>
-                ))}
+      {hasTasks && (
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {tasks.map((t, i) => {
+            const hist = progressByTaskId[t.id]
+            return (
+              <div key={t.id} style={{
+                display: 'flex', alignItems: 'center', gap: 11, padding: '9px 2px',
+                borderBottom: i === tasks.length - 1 && !hasWorking && !hasWins ? 'none' : '1px solid var(--border-subtle)',
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.description}</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>{t.metric}</div>
+                </div>
+                {hist
+                  ? hist.recent.length === 0
+                    ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', flex: 'none' }}>not yet measured</span>
+                    : <ResultDots recent={hist.recent} />
+                  : <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', flex: 'none' }}>pending</span>}
+                {!!hist && hist.streak >= 2 && (
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--win)', flex: 'none' }}>
+                    {hist.streak} in a row
+                  </span>
+                )}
               </div>
-            </div>
-          )}
+            )
+          })}
 
-          {p.working.length > 0 && (
+          {hasWorking && (
             <div>
               <ProgressBlockLabel>Working on</ProgressBlockLabel>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                {p.working.map((w, i) => (
+                {p!.working.map((w, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                     <Icon name="crosshair" size={13} style={{ color: 'var(--warn)', flex: 'none' }} />
                     <span style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45 }}>{w.statement}</span>
@@ -281,11 +247,11 @@ function Progress() {
             </div>
           )}
 
-          {p.wins.length > 0 && (
+          {hasWins && (
             <div>
               <ProgressBlockLabel>Wins</ProgressBlockLabel>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                {p.wins.map((w, i) => (
+                {p!.wins.map((w, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                     <Icon name="check" size={13} style={{ color: 'var(--win)', flex: 'none' }} />
                     <span style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45 }}>{w.statement}</span>
@@ -626,11 +592,9 @@ export function Home({ data, onOpen, onNav }: {
         <GoalNotes />
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, alignItems: 'start' }}>
-          <NextFocus onOpen={onOpen} latestMatchId={matches[0]?.matchId} />
+          <FocusCard onOpen={onOpen} latestMatchId={matches[0]?.matchId} />
           <QuickAnalysis />
         </div>
-
-        <Progress />
       </section>
     </div>
   )
