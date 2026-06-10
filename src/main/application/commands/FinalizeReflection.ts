@@ -7,6 +7,7 @@ import type { MatchCoachingModel } from '../ports/MatchCoachingModel'
 import { assembleMatchReport } from '../../domain/report/assembleMatchReport'
 import { buildCoachBriefing } from '../../domain/report/coachBriefing'
 import { mergeStanding, enforceStandingSet } from '../../domain/report/focusTask'
+import { makeRefLineRenderer } from '../../domain/report/resolveChatRefs'
 import { mergeSemanticObjects } from '../../domain/memory/semanticObject'
 import type { SemanticObject } from '../../domain/memory/semanticObject'
 import { METRIC_KEYS } from '../../domain/report/metricRegistry'
@@ -54,9 +55,15 @@ export class FinalizeReflection {
     })
 
     const briefing = buildCoachBriefing(report, stored, goal)
+    // Ground evidence refs exactly like the live chat did, so "why did I die
+    // HERE?" keeps its meaning when the transcript is summarised at close.
+    const renderRefs = makeRefLineRenderer(report)
+    const grounded = messages.map((m) =>
+      m.refs?.length ? { ...m, text: `${renderRefs(m.refs).join('\n')}\n\n${m.text}` } : m
+    )
     const proposal = await this.model.summarizeReflection(
       briefing,
-      messages,
+      grounded,
       { standing, catalogMetricKeys: METRIC_KEYS, goal, existingMemory: projectMemory(existingMemory) },
       this.chatModel
     )
@@ -72,7 +79,7 @@ export class FinalizeReflection {
     // omission — the light model often returns an empty/partial `set` rather than
     // echoing the existing tasks. So we start from the current set (minus any
     // explicitly-retired ids) and only fold in genuinely new proposed tasks.
-    const newStanding = this.applyProposal(standing, proposal.tasks, matchId)
+    const newStanding = this.applyProposal(standing, proposal.tasks, matchId, this.now())
     const tasksUpdated = !sameSet(standing, newStanding)
 
     let analysis: ReflectionOutcome['analysis'] = null
@@ -103,14 +110,16 @@ export class FinalizeReflection {
   private applyProposal(
     standing: StandingFocusTask[],
     proposal: TaskProposal,
-    matchId: string
+    matchId: string,
+    at: number
   ): StandingFocusTask[] {
     const retire = new Set(proposal.retire)
     const kept = standing.filter((t) => !retire.has(t.id))
     // mergeStanding validates the proposed tasks (computable metrics only),
     // preserves ids of ones already present, and mints `${matchId}-refl-*` ids for
-    // genuinely new ones (a distinct seed avoids colliding with analysis ids).
-    const proposed = mergeStanding(proposal.set, standing, `${matchId}-refl`)
+    // genuinely new ones (a distinct seed avoids colliding with analysis ids; the
+    // timestamp keeps a repeated finalize from reusing an earlier mint).
+    const proposed = mergeStanding(proposal.set, standing, `${matchId}-refl`, at)
     const union = [...kept]
     for (const p of proposed) {
       if (!union.some((u) => sameShape(u, p))) union.push(p)

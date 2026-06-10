@@ -41,12 +41,18 @@ export function useCoachingConfig(): UseCoachingConfig {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const alive = useRef(true)
+  // The latest DESIRED state, mutations applied client-side in order. Every save
+  // builds from this ref, never from the React state: two rapid interactions
+  // (e.g. a prompt textarea blur + a toggle click) would otherwise both build
+  // from the same stale config and the second save would silently undo the first.
+  const desired = useRef<SaveCoachingConfigInput | null>(null)
 
   useEffect(() => {
     alive.current = true
     window.api
       .getCoachingConfig()
       .then((c) => {
+        desired.current = toInput(c)
         if (alive.current) setConfig(c)
       })
       .catch(() => {
@@ -75,52 +81,46 @@ export function useCoachingConfig(): UseCoachingConfig {
       })
   }, [])
 
-  const setSource = useCallback(
-    (id: string, on: boolean) => {
-      if (!config) return
-      const input = toInput(config)
-      input.sources[id] = on
+  /** Apply one mutation on top of the desired-state mirror and save the result. */
+  const mutate = useCallback(
+    (apply: (input: SaveCoachingConfigInput) => void) => {
+      if (!desired.current) return
+      const input: SaveCoachingConfigInput = {
+        sources: { ...desired.current.sources },
+        blocks: { ...desired.current.blocks },
+        budgetTier: desired.current.budgetTier,
+        prompts: { ...desired.current.prompts },
+      }
+      apply(input)
+      desired.current = input
       save(input)
     },
-    [config, save],
+    [save],
+  )
+
+  const setSource = useCallback(
+    (id: string, on: boolean) => mutate((input) => { input.sources[id] = on }),
+    [mutate],
   )
 
   const setBlock = useCallback(
-    (id: string, on: boolean) => {
-      if (!config) return
-      const input = toInput(config)
-      input.blocks[id] = on
-      save(input)
-    },
-    [config, save],
+    (id: string, on: boolean) => mutate((input) => { input.blocks[id] = on }),
+    [mutate],
   )
 
   const setTier = useCallback(
-    (tier: BudgetTier) => {
-      if (!config) return
-      save({ ...toInput(config), budgetTier: tier })
-    },
-    [config, save],
+    (tier: BudgetTier) => mutate((input) => { input.budgetTier = tier }),
+    [mutate],
   )
 
   const setPromptInstructions = useCallback(
-    (id: string, text: string) => {
-      if (!config) return
-      const input = toInput(config)
-      input.prompts[id] = text
-      save(input)
-    },
-    [config, save],
+    (id: string, text: string) => mutate((input) => { input.prompts[id] = text }),
+    [mutate],
   )
 
   const restorePrompt = useCallback(
-    (id: string) => {
-      if (!config) return
-      const input = toInput(config)
-      input.prompts[id] = ''
-      save(input)
-    },
-    [config, save],
+    (id: string) => mutate((input) => { input.prompts[id] = '' }),
+    [mutate],
   )
 
   const restoreDefaults = useCallback(() => {
@@ -133,6 +133,7 @@ export function useCoachingConfig(): UseCoachingConfig {
     window.api
       .restoreCoachingConfigDefaults()
       .then((c) => {
+        desired.current = toInput(c)
         if (alive.current) setConfig(c)
       })
       .catch(() => {

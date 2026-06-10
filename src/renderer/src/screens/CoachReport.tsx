@@ -705,7 +705,9 @@ export function CoachReport({ matchId, onAnalyzed }: {
       {analyzed && (
         <section>
           <SectionLabel icon="message-circle">Coach Corky</SectionLabel>
-          <CoachChat matchId={matchId} core={core} review={review} onTasksUpdated={apply}
+          {/* Keyed by match: an in-flight reply for game A must never land in
+              game B's mounted transcript (the remount drops the continuation). */}
+          <CoachChat key={matchId} matchId={matchId} core={core} review={review} onTasksUpdated={apply}
             pendingRefs={pendingRefs} onRemoveRef={removeRef} onClearRefs={clearRefs} />
         </section>
       )}

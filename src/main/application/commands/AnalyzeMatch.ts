@@ -211,12 +211,14 @@ export class AnalyzeMatch {
     const firstTime = standing.length === 0
     const sinceLast: FocusTaskEval[] = standing.map((t) => evaluateTask(t, report))
 
-    // Persist the evaluations (the per-game since-last record).
-    standing.forEach((t) => {
+    // Persist the evaluations (the per-game since-last record). sinceLast was
+    // mapped from `standing`, so positions align 1:1 — index, never match by
+    // description (the model writes those; duplicates are plausible).
+    standing.forEach((t, i) => {
       this.reportRepo.insertTaskEvaluation({
         taskId: t.id,
         evaluatingMatchId: matchId,
-        result: (sinceLast.find((e) => e.description === t.description) ?? sinceLast[0])?.result ?? 'not_applicable',
+        result: sinceLast[i]?.result ?? 'not_applicable',
         actualValue: computeMetric(t.metric, report)
       })
     })
@@ -227,13 +229,13 @@ export class AnalyzeMatch {
         { standing, sinceLast, goal, catalogMetricKeys: METRIC_KEYS },
         this.heavyModel
       )
-      const newStanding = mergeStanding(proposal.set, standing, matchId)
+      const at = this.now()
+      const newStanding = mergeStanding(proposal.set, standing, matchId, at)
       const keepIds = new Set(newStanding.map((t) => t.id))
       const toRetire = [
         ...standing.filter((s) => !keepIds.has(s.id)).map((s) => s.id),
         ...proposal.retire
       ]
-      const at = this.now()
       this.reportRepo.retireStandingTasks([...new Set(toRetire)], at)
       this.reportRepo.saveStandingTasks(puuid, newStanding, at)
       return { value: { standing: newStanding, sinceLast, firstTime }, status: 'done' }

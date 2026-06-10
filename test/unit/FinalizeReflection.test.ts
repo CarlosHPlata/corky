@@ -138,7 +138,7 @@ describe('FinalizeReflection', () => {
     expect(refreshed?.statement).toContain('Still dies solo')
     expect(refreshed?.evidenceMatchIds).toEqual(['OLD_01', 'WIN_001'])
     const minted = rows.find((r) => r.kind === 'strength')
-    expect(minted?.id).toBe('WIN_001-mem-1') // minted from the source match
+    expect(minted?.id).toMatch(/^WIN_001-mem-/) // minted from the source match (time-tagged, collision-proof)
     expect(minted?.occurrences).toBe(1)
     expect(minted?.status).toBe('active')
   })

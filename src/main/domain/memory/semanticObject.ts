@@ -82,8 +82,10 @@ export function mergeSemanticObjects(
         status: match.status === 'stale' ? 'active' : match.status
       })
     } else {
+      // The mint carries `now` so a re-finalize of the same match (a first-class
+      // flow) can never reuse an id and silently overwrite an unrelated object.
       upserts.push({
-        id: `${sourceMatchId}-mem-${index}`,
+        id: `${sourceMatchId}-mem-${now.toString(36)}-${index}`,
         kind: p.kind,
         ...(p.champion ? { champion: p.champion } : {}),
         ...(p.role ? { role: p.role } : {}),

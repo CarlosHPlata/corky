@@ -58,7 +58,7 @@ describe('mergeSemanticObjects', () => {
     const out = mergeSemanticObjects([proposed()], [], 'M2', 500)
     expect(out).toEqual([
       {
-        id: 'M2-mem-0', kind: 'pattern', statement: 'dies solo in river 14-20min',
+        id: `M2-mem-${(500).toString(36)}-0`, kind: 'pattern', statement: 'dies solo in river 14-20min',
         evidenceMatchIds: ['M2'], occurrences: 1, firstSeen: 500, lastSeen: 500,
         status: 'active'
       }
@@ -90,7 +90,7 @@ describe('mergeSemanticObjects', () => {
       500
     )
     expect(out).toHaveLength(1)
-    expect(out[0].id).toBe('M2-mem-1') // index follows the proposed array, not the survivors
+    expect(out[0].id).toBe(`M2-mem-${(500).toString(36)}-1`) // index follows the proposed array, not the survivors
     expect(out[0].statement).toBe('great dragon setups')
   })
 
@@ -115,7 +115,7 @@ describe('mergeSemanticObjects', () => {
   it('never matches a resolved object — a new one is minted instead', () => {
     const out = mergeSemanticObjects([proposed()], [existing({ status: 'resolved' })], 'M2', 500)
     expect(out).toHaveLength(1)
-    expect(out[0].id).toBe('M2-mem-0')
+    expect(out[0].id).toBe(`M2-mem-${(500).toString(36)}-0`)
     expect(out[0].occurrences).toBe(1)
   })
 

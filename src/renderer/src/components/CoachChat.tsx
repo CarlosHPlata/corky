@@ -116,7 +116,15 @@ export function CoachChat({ matchId, core, review, onTasksUpdated, pendingRefs, 
     let alive = true
     void (async () => {
       let stored: { turns: ChatTurn[]; reflection: string | null } | null = null
-      try { stored = await window.api.getChatTranscript(matchId) } catch { /* fall through to legacy */ }
+      try {
+        stored = await window.api.getChatTranscript(matchId)
+      } catch {
+        // A transient load failure must NOT arm the save path: treating it as
+        // "empty" would let the opener overwrite a real stored transcript on the
+        // next persistence tick. Leave unhydrated (sends blocked) — reopening
+        // the report retries the load.
+        return
+      }
       let turns = stored && stored.turns.length > 0 ? stored.turns : null
       let refl = stored?.reflection ?? ''
       if (!turns && !refl) {
@@ -124,11 +132,14 @@ export function CoachChat({ matchId, core, review, onTasksUpdated, pendingRefs, 
         const legacyRefl = loadLegacyReflection(reflectKey)
         if (legacyTurns || legacyRefl) {
           turns = legacyTurns; refl = legacyRefl
+          // Each legacy key is adopted and removed independently, so a failed
+          // reflection save can't orphan the other half forever.
           try {
-            if (legacyTurns) await window.api.saveChatTranscript(matchId, legacyTurns)
-            if (legacyRefl) await window.api.saveChatReflection(matchId, legacyRefl)
-            localStorage.removeItem(chatKey); localStorage.removeItem(reflectKey)
-          } catch { /* keys stay put; migration retries next open */ }
+            if (legacyTurns) { await window.api.saveChatTranscript(matchId, legacyTurns); localStorage.removeItem(chatKey) }
+          } catch { /* key stays put; migration retries next open */ }
+          try {
+            if (legacyRefl) { await window.api.saveChatReflection(matchId, legacyRefl); localStorage.removeItem(reflectKey) }
+          } catch { /* key stays put; migration retries next open */ }
         }
       }
       if (!alive) return
@@ -161,8 +172,12 @@ export function CoachChat({ matchId, core, review, onTasksUpdated, pendingRefs, 
     setMsgs(next); setDraft(''); setThinking(true)
     try {
       const { reply } = await window.api.coachChat(matchId, next)
+      // Belt over the key={matchId} braces: a continuation for another match's
+      // session must never touch this transcript.
+      if (hydratedFor.current !== matchId) return
       setMsgs((cur) => cur.concat({ role: 'assistant', text: clean(reply) || 'Sorry — I lost my train of thought there. Say that again?' }))
     } catch {
+      if (hydratedFor.current !== matchId) return
       setMsgs((cur) => cur.concat({ role: 'assistant', text: "I couldn't reach my notes just now — try that again in a sec." }))
     } finally {
       setThinking(false)
@@ -174,6 +189,7 @@ export function CoachChat({ matchId, core, review, onTasksUpdated, pendingRefs, 
     setFinalizing(true)
     try {
       const outcome = await window.api.finalizeReflection(matchId, msgs)
+      if (hydratedFor.current !== matchId) return
       const text = clean(outcome.reflection)
       if (text) {
         setReflection(text); setView('done')
