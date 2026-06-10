@@ -1,4 +1,4 @@
-import type { ChatTurn, CoachChatReply, MatchReport } from '@shared/types'
+import type { ChatTurn, CoachChatReply, MatchReport, StandingFocusTask } from '@shared/types'
 import type { ResolvedCoachingConfig } from '@shared/config'
 import type { MatchRepository } from '../ports/MatchRepository'
 import type { ReportRepository } from '../ports/ReportRepository'
@@ -86,7 +86,7 @@ export class CoachChat {
 
     const result = await this.model.chatAgentic(
       briefing,
-      this.groundTurns(report, messages),
+      this.groundTurns(report, standing, messages),
       extras,
       this.chatModel
     )
@@ -222,8 +222,12 @@ export class CoachChat {
    * turns carrying a RESOLVED proposal get a bracketed outcome line appended —
    * that is how Reject "informs the coach" (FR-005) with no side channel.
    */
-  private groundTurns(report: MatchReport, messages: ChatTurn[]): ChatTurn[] {
-    const render = makeRefLineRenderer(report)
+  private groundTurns(
+    report: MatchReport,
+    standing: StandingFocusTask[],
+    messages: ChatTurn[]
+  ): ChatTurn[] {
+    const render = makeRefLineRenderer(report, standing)
     return messages.map((m) => {
       let text = m.text
       if (m.refs?.length) {

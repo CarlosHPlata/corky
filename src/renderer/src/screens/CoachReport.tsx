@@ -671,7 +671,14 @@ export function CoachReport({ matchId, onAnalyzed }: {
         {tasks
           ? <>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {tasks.standing.map((t) => <FocusTask key={t.id} description={t.description} metric={t.metric} comparator={t.comparator} target={t.target} scope={t.scope} result="pending" />)}
+                {/* Touchable (spec 005 US4): click a task to ask Corky about it —
+                    the ref grounds to the task's exact rule in the main process. */}
+                {tasks.standing.map((t) => (
+                  <Askable key={t.id} onAsk={addRef}
+                    evidence={{ id: `task:${t.id}`, kind: 'task', label: t.description }}>
+                    <FocusTask description={t.description} metric={t.metric} comparator={t.comparator} target={t.target} scope={t.scope} result="pending" />
+                  </Askable>
+                ))}
               </div>
               <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--text-faint)', marginTop: 12, display: 'flex', alignItems: 'center', gap: 7 }}>
                 <Icon name="sparkles" size={13} style={{ color: 'var(--gold-400)' }} />

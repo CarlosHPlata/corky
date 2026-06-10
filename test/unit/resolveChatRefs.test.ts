@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { renderRefLines } from '../../src/main/domain/report/resolveChatRefs'
-import type { MatchReport, MatchCore, EvidenceRef } from '../../src/shared/types'
+import type { MatchReport, MatchCore, EvidenceRef, StandingFocusTask } from '../../src/shared/types'
 
 const core: MatchCore = {
   champion: 'Ahri', role: 'Mid', win: false,
@@ -59,5 +59,35 @@ describe('renderRefLines', () => {
     const out = renderRefLines(report, refs)
     expect(out).toHaveLength(5)
     expect(out[4]).toBe('REF stat:gold_per_min=360 (Gold per minute)')
+  })
+
+  // ── spec 005 US4: task refs resolve against the standing set ───────────────
+
+  const TASK: StandingFocusTask = {
+    id: 'M1-task-1', description: 'End every game above 25 vision score',
+    metric: 'vision_score', comparator: '>=', target: 25,
+    scope: 'universal', status: 'active', sourceMatchId: 'M1'
+  }
+
+  it('renders a task ref with its exact rule and status', () => {
+    const out = renderRefLines(report, [ref(`task:${TASK.id}`, 'task')], [TASK])
+    expect(out).toEqual([
+      'REF task:M1-task-1 "End every game above 25 vision score" rule=vision_score>=25 scope=universal status=active'
+    ])
+  })
+
+  it('a retired task still present grounds with status=retired', () => {
+    const out = renderRefLines(report, [ref(`task:${TASK.id}`, 'task')], [{ ...TASK, status: 'retired' }])
+    expect(out[0]).toContain('status=retired')
+  })
+
+  it('a vanished task grounds as not-found (consistent with invalid refs)', () => {
+    const out = renderRefLines(report, [ref('task:ghost', 'task')], [TASK])
+    expect(out).toEqual(['REF task:ghost (not found in this match)'])
+  })
+
+  it('with no standing set provided every task ref grounds as not-found', () => {
+    const out = renderRefLines(report, [ref(`task:${TASK.id}`, 'task')])
+    expect(out).toEqual([`REF task:${TASK.id} (not found in this match)`])
   })
 })

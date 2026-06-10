@@ -86,10 +86,10 @@
 
 **Independent Test**: Chat in session 1, save a reflection, new chat → coach references the reflection in session 2; switcher shows both; legacy transcript appears as "First session" (quickstart steps 8, 10).
 
-- [ ] T023 [P] [US3] Add session switcher + "New chat" UI to src/renderer/src/components/CoachChat.tsx against stubs/chatSessions.ts (metas list newest-first, draft entry, active highlight). **Review gate before T024+**
-- [ ] T024 [US3] Extend src/renderer/src/data/useChatSessions.ts to multi-session — metas via `listChatSessions`, draft session (opener only, no row), lazy promote on first player send, switch loads via `getChatSession`, `key={sessionId}` remount + per-session hydration/save guards (contracts/ipc-chat-sessions.md renderer contract)
-- [ ] T025 [US3] Re-point legacy localStorage *transcript* adoption to `saveChatSession(matchId, '<matchId>-sess-legacy', turns)`; retire `chat:transcript:get|save` + `chat:reflection:save` channels and `getChatTranscript`/`saveChatTranscript`/`saveChatReflection` from src/shared/types.ts, src/preload/index.ts, src/main/adapters/driving/IpcController.ts; delete src/main/application/commands/SaveChatTranscript.ts + src/main/application/queries/GetChatTranscript.ts (ChatTranscriptRepository stays as migration source)
-- [ ] T026 [US3] Verify context guarantee — new session's first reply can cite an existing reflection (REFLECTIONS block from T014); verify no cross-session transcript leakage; acceptance walk quickstart step 8
+- [X] T023 [P] [US3] Add session switcher + "New chat" UI to src/renderer/src/components/CoachChat.tsx against stubs/chatSessions.ts (metas list newest-first, draft entry, active highlight). **Review gate before T024+**
+- [X] T024 [US3] Extend src/renderer/src/data/useChatSessions.ts to multi-session — metas via `listChatSessions`, draft session (opener only, no row), lazy promote on first player send, switch loads via `getChatSession`, `key={sessionId}` remount + per-session hydration/save guards (contracts/ipc-chat-sessions.md renderer contract)
+- [X] T025 [US3] Re-point legacy localStorage *transcript* adoption to `saveChatSession(matchId, '<matchId>-sess-legacy', turns)`; retire `chat:transcript:get|save` + `chat:reflection:save` channels and `getChatTranscript`/`saveChatTranscript`/`saveChatReflection` from src/shared/types.ts, src/preload/index.ts, src/main/adapters/driving/IpcController.ts; delete src/main/application/commands/SaveChatTranscript.ts + src/main/application/queries/GetChatTranscript.ts (ChatTranscriptRepository stays as migration source)
+- [X] T026 [US3] Verify context guarantee — new session's first reply can cite an existing reflection (REFLECTIONS block from T014); verify no cross-session transcript leakage; acceptance walk quickstart step 8
 
 **Checkpoint**: Sessions work; legacy data fully adopted; old transcript channels gone.
 
