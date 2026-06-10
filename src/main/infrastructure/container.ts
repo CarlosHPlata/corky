@@ -7,6 +7,8 @@ import { SqliteSessionAnalysisRepository } from '../adapters/driven/sqlite/Sqlit
 import { SqliteSessionGoalRepository } from '../adapters/driven/sqlite/SqliteSessionGoalRepository'
 import { SqliteSemanticMemory } from '../adapters/driven/sqlite/SqliteSemanticMemory'
 import { SqliteChatTranscriptRepository } from '../adapters/driven/sqlite/SqliteChatTranscriptRepository'
+import { SqliteChatSessionRepository } from '../adapters/driven/sqlite/SqliteChatSessionRepository'
+import { SqliteReflectionRepository } from '../adapters/driven/sqlite/SqliteReflectionRepository'
 import { RiotApiClient } from '../adapters/driven/riot/RiotApiClient'
 import { AnthropicCoachingModel } from '../adapters/driven/anthropic/AnthropicCoachingModel'
 import { AnthropicSessionCoachingModel } from '../adapters/driven/anthropic/AnthropicSessionCoachingModel'
@@ -32,6 +34,8 @@ import { GetStandingTasks } from '../application/queries/GetStandingTasks'
 import { GetProgress } from '../application/queries/GetProgress'
 import { GetChatTranscript } from '../application/queries/GetChatTranscript'
 import { SaveChatTranscript } from '../application/commands/SaveChatTranscript'
+import { GetChatSessions } from '../application/queries/GetChatSessions'
+import { SaveChatSession } from '../application/commands/SaveChatSession'
 import { GetSessionGoal } from '../application/queries/GetSessionGoal'
 import { SaveSessionGoal } from '../application/commands/SaveSessionGoal'
 import { SqliteCoachingConfigRepository } from '../adapters/driven/sqlite/SqliteCoachingConfigRepository'
@@ -50,6 +54,8 @@ export function buildContainer() {
   const sessionGoalRepo = new SqliteSessionGoalRepository(db)
   const semanticMemory = new SqliteSemanticMemory(db)
   const chatTranscriptRepo = new SqliteChatTranscriptRepository(db)
+  const chatSessionRepo = new SqliteChatSessionRepository(db)
+  const reflectionRepo = new SqliteReflectionRepository(db)
   const coachingConfigRepo = new SqliteCoachingConfigRepository(db)
   const riotClient = new RiotApiClient(config.riotApiKey)
   const coachingModel = new AnthropicCoachingModel(config.anthropicApiKey)
@@ -137,6 +143,8 @@ export function buildContainer() {
   const getProgress = new GetProgress(matchRepo, reportRepo, semanticMemory)
   const getChatTranscript = new GetChatTranscript(chatTranscriptRepo)
   const saveChatTranscript = new SaveChatTranscript(chatTranscriptRepo)
+  const getChatSessions = new GetChatSessions(chatSessionRepo)
+  const saveChatSession = new SaveChatSession(chatSessionRepo)
   const getSessionAnalysis = new GetSessionAnalysis(matchRepo, sessionAnalysisRepo)
   const getSessionGoal = new GetSessionGoal(sessionGoalRepo)
   const saveSessionGoal = new SaveSessionGoal(sessionGoalRepo)
@@ -173,6 +181,10 @@ export function buildContainer() {
     chatTranscriptRepo,
     getChatTranscript,
     saveChatTranscript,
+    chatSessionRepo,
+    reflectionRepo,
+    getChatSessions,
+    saveChatSession,
     analyzeSession,
     getSessionAnalysis,
     getSessionGoal,

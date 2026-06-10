@@ -292,10 +292,12 @@ export type MetricKey =
   | 'deaths'
 
 /** A claim's evidence anchor. Structured kinds (`stat`/`marker`) must cite an id
- * present in the computed anchor catalog; `benchmark`/`note` are typed chips. */
+ * present in the computed anchor catalog; `benchmark`/`note` are typed chips.
+ * `task` refs (spec 005) cite a standing focus task (`task:<taskId>`) and are
+ * resolved against the standing set, not the anchor catalog. */
 export interface EvidenceRef {
   id: string
-  kind: 'stat' | 'marker' | 'benchmark' | 'note'
+  kind: 'stat' | 'marker' | 'benchmark' | 'note' | 'task'
   label?: string
 }
 
@@ -463,11 +465,115 @@ export interface ChatTurn {
   /** Evidence anchors the player attached to this message from the report
    * (timeline markers, deaths, stats); grounded to facts in the main process. */
   refs?: EvidenceRef[]
+  /** A confirm-first action proposal embedded in this (assistant) turn (spec 005).
+   * Persisted with the transcript so pending cards survive restarts. */
+  proposal?: ActionProposal
 }
 
 /** Corky's reply to a single chat turn. */
 export interface CoachChatReply {
   reply: string
+  /** Present when this turn minted a (sanitised, pending) proposal. The renderer
+   * appends this turn instead of building its own assistant turn (spec 005). */
+  proposalTurn?: ChatTurn
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Agentic coach chat (spec 005) — confirm-first proposals, first-class
+// reflections, multiple chat sessions per match.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Who authored a reflection: the player by hand, or Corky via accepted proposal. */
+export type ReflectionSource = 'player' | 'coach'
+
+/** A durable takeaway about one match. Many per match; refs are report anchors
+ * or `task:` ids. Input to memory distillation, never a memory row itself. */
+export interface Reflection {
+  id: string
+  matchId: string
+  text: string
+  refs: EvidenceRef[]
+  source: ReflectionSource
+  createdAt: number
+  updatedAt: number
+}
+
+/** What the renderer submits when saving a reflection manually. `id` absent ⇒
+ * create; present ⇒ edit. The main process trims, caps and filters refs. */
+export interface SaveReflectionInput {
+  matchId: string
+  id?: string
+  text: string
+  refs: EvidenceRef[]
+}
+
+/** Listing entry for one coaching chat session of a match. */
+export interface ChatSessionMeta {
+  id: string
+  matchId: string
+  title: string
+  createdAt: number
+  updatedAt: number
+}
+
+/** A full session: meta + its transcript (incl. embedded proposals). */
+export interface ChatSession extends ChatSessionMeta {
+  turns: ChatTurn[]
+}
+
+/** A proposal resolves exactly once: pending → accepted | rejected | stale. */
+export type ProposalResolution = 'pending' | 'accepted' | 'rejected' | 'stale'
+
+/** The validated payload of a coach proposal. Persisted post-sanitisation only —
+ * a stored proposal is always acceptable modulo staleness. */
+export type ProposalPayload =
+  | {
+      kind: 'update_tasks'
+      /** The FULL resulting standing set (1–3), already validated. */
+      set: StandingFocusTask[]
+      /** Explicit retires (subset of the standing set at proposal time). */
+      retireIds: string[]
+      /** Shape signature of the standing set at proposal time (stale check). */
+      baseline: string
+    }
+  | { kind: 'create_reflection'; text: string; refs: EvidenceRef[] }
+  | {
+      kind: 'update_reflection'
+      reflectionId: string
+      text: string
+      refs: EvidenceRef[]
+      /** Target reflection's updatedAt at proposal time (stale check). */
+      baseline: number
+    }
+  | { kind: 'delete_reflection'; reflectionId: string; baseline: number }
+
+/** A coach-suggested state change awaiting the player's decision, embedded in
+ * the assistant turn that delivered it. Nothing persists until accepted. */
+export interface ActionProposal {
+  id: string
+  payload: ProposalPayload
+  resolution: ProposalResolution
+  resolvedAt?: number
+}
+
+/** The renderer's accept/reject decision on one proposal. */
+export interface ResolveProposalInput {
+  matchId: string
+  sessionId: string
+  proposalId: string
+  decision: 'accept' | 'reject'
+}
+
+/** Outcome of resolving a proposal. Idempotent: re-resolving returns the
+ * recorded outcome unchanged. */
+export interface ResolveProposalOutcome {
+  /** Never 'pending'. 'stale' ⇒ nothing was applied. */
+  resolution: ProposalResolution
+  /** Patched stored analysis when a task accept changed the Next-game focus;
+   * lets the report re-render without a re-analyse. Null otherwise. */
+  analysis: MatchAnalysis | null
+  /** The saved/updated reflection on reflection accepts; null otherwise. */
+  reflection: Reflection | null
 }
 
 /** Result of finalising a coaching session: the written reflection plus any
@@ -521,6 +627,13 @@ export interface IpcApi {
   /** Persist the (player-edited or cleaned) reflection text for a match;
    * stored turns are preserved. Finalize also persists server-side. */
   saveChatReflection: (matchId: string, reflection: string) => Promise<void>
+  /** Switcher listing of a match's chat sessions, newest first (spec 005). */
+  listChatSessions: (matchId: string) => Promise<ChatSessionMeta[]>
+  /** One full session (turns incl. proposals), or null when missing/unreadable. */
+  getChatSession: (sessionId: string) => Promise<ChatSession | null>
+  /** Upsert one session's transcript. Lazy creation: first call creates the row
+   * (server stamps the title); resolutions embedded in turns are read-only. */
+  saveChatSession: (matchId: string, sessionId: string, turns: ChatTurn[]) => Promise<ChatSessionMeta>
   getCoachReport: (matchId: string) => Promise<CoachReport | null>
   /** Generate a fresh analysis and persist it as the account's latest. */
   runSessionAnalysis: () => Promise<SessionAnalysis>

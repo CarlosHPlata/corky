@@ -3,7 +3,8 @@ import type {
   IpcApi, MatchSummary, MatchPage, MatchPageRequest, MatchReport,
   SummonerProfile, LpSnapshot, CoachReport, SessionAnalysis,
   SessionGoal, SessionGoalInput, MatchAnalysis, AnalyzeMatchOptions,
-  ChatTurn, CoachChatReply, ReflectionOutcome, StandingFocusTask, ProgressSummary
+  ChatTurn, CoachChatReply, ReflectionOutcome, StandingFocusTask, ProgressSummary,
+  ChatSession, ChatSessionMeta
 } from '../shared/types'
 import type { ResolvedCoachingConfig, SaveCoachingConfigInput } from '../shared/config'
 
@@ -33,6 +34,12 @@ const api: IpcApi = {
     ipcRenderer.invoke('chat:transcript:save', matchId, turns),
   saveChatReflection: (matchId: string, reflection: string): Promise<void> =>
     ipcRenderer.invoke('chat:reflection:save', matchId, reflection),
+  listChatSessions: (matchId: string): Promise<ChatSessionMeta[]> =>
+    ipcRenderer.invoke('chat:sessions:list', matchId),
+  getChatSession: (sessionId: string): Promise<ChatSession | null> =>
+    ipcRenderer.invoke('chat:sessions:get', sessionId),
+  saveChatSession: (matchId: string, sessionId: string, turns: ChatTurn[]): Promise<ChatSessionMeta> =>
+    ipcRenderer.invoke('chat:sessions:save', matchId, sessionId, turns),
   getCoachReport: (matchId: string): Promise<CoachReport | null> =>
     ipcRenderer.invoke('report:get', matchId),
   runSessionAnalysis: (): Promise<SessionAnalysis> => ipcRenderer.invoke('analysis:session:run'),

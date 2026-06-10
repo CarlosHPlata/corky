@@ -16,6 +16,8 @@ import type { GetStandingTasks } from '../../application/queries/GetStandingTask
 import type { GetProgress } from '../../application/queries/GetProgress'
 import type { GetChatTranscript } from '../../application/queries/GetChatTranscript'
 import type { SaveChatTranscript } from '../../application/commands/SaveChatTranscript'
+import type { GetChatSessions } from '../../application/queries/GetChatSessions'
+import type { SaveChatSession } from '../../application/commands/SaveChatSession'
 import type { ChatTranscriptRepository } from '../../application/ports/ChatTranscriptRepository'
 import type { AnalyzeMatchOptions, ChatTurn } from '@shared/types'
 import type { GetSessionAnalysis } from '../../application/queries/GetSessionAnalysis'
@@ -45,6 +47,8 @@ export function registerIpcHandlers(deps: {
   getProgress: GetProgress
   getChatTranscript: GetChatTranscript
   saveChatTranscript: SaveChatTranscript
+  getChatSessions: GetChatSessions
+  saveChatSession: SaveChatSession
   /** Direct repo dep: the finalize handler and the reflection-save channel
    * persist the written reflection alongside the transcript. */
   chatTranscriptRepo: ChatTranscriptRepository
@@ -130,6 +134,21 @@ export function registerIpcHandlers(deps: {
   ipcMain.handle('chat:reflection:save', (_event, matchId: string, reflection: string) => {
     deps.chatTranscriptRepo.saveReflection(matchId, reflection)
   })
+
+  ipcMain.handle('chat:sessions:list', (_event, matchId: string) => {
+    return deps.getChatSessions.listMetas(matchId)
+  })
+
+  ipcMain.handle('chat:sessions:get', (_event, sessionId: string) => {
+    return deps.getChatSessions.get(sessionId)
+  })
+
+  ipcMain.handle(
+    'chat:sessions:save',
+    (_event, matchId: string, sessionId: string, turns: ChatTurn[]) => {
+      return deps.saveChatSession.execute(matchId, sessionId, turns)
+    }
+  )
 
   ipcMain.handle('analysis:session:get', () => {
     return deps.getSessionAnalysis.execute()

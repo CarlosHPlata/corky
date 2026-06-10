@@ -17,9 +17,9 @@
 
 **Purpose**: Additive shared-type groundwork every story builds on. Nothing is removed yet — the app keeps compiling and running on the 004 flow throughout.
 
-- [ ] T001 Add new DTOs to src/shared/types.ts — `Reflection`/`ReflectionSource`, `ChatSessionMeta`/`ChatSession`, `ProposalPayload`/`ActionProposal`/`ProposalResolution`, `ChatTurn.proposal?`, `EvidenceRef.kind` + `'task'`, `SaveReflectionInput`, `ResolveProposalInput`/`ResolveProposalOutcome`, `CoachChatReply.proposalTurn?` (per data-model.md; keep `ReflectionOutcome` and legacy channel types alive until T031)
-- [ ] T002 [P] Create stub src/renderer/src/stubs/chatSessions.ts — two sessions for one match; turns covering plain chat, pending task proposal, accepted task proposal, rejected reflection proposal, stale task proposal (Constitution VIII)
-- [ ] T003 [P] Create stub src/renderer/src/stubs/reflections.ts — empty / player-only / mixed player+coach with refs / at-cap states (Constitution VIII)
+- [X] T001 Add new DTOs to src/shared/types.ts — `Reflection`/`ReflectionSource`, `ChatSessionMeta`/`ChatSession`, `ProposalPayload`/`ActionProposal`/`ProposalResolution`, `ChatTurn.proposal?`, `EvidenceRef.kind` + `'task'`, `SaveReflectionInput`, `ResolveProposalInput`/`ResolveProposalOutcome`, `CoachChatReply.proposalTurn?` (per data-model.md; keep `ReflectionOutcome` and legacy channel types alive until T031)
+- [X] T002 [P] Create stub src/renderer/src/stubs/chatSessions.ts — two sessions for one match; turns covering plain chat, pending task proposal, accepted task proposal, rejected reflection proposal, stale task proposal (Constitution VIII)
+- [X] T003 [P] Create stub src/renderer/src/stubs/reflections.ts — empty / player-only / mixed player+coach with refs / at-cap states (Constitution VIII)
 
 ---
 

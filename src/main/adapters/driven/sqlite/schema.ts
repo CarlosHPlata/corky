@@ -199,5 +199,51 @@ export function runMigrations(db: Database.Database): void {
       reflection TEXT,
       updated_at INTEGER NOT NULL
     );
+
+    -- Player/coach takeaways per match (spec 005). Many per match; refs_json
+    -- holds EvidenceRef[] (report anchors or task: ids). Reflections feed the
+    -- memory distiller as input — they are never semantic_objects rows.
+    CREATE TABLE IF NOT EXISTS reflections (
+      id         TEXT PRIMARY KEY,
+      match_id   TEXT NOT NULL,
+      text       TEXT NOT NULL,
+      refs_json  TEXT NOT NULL,
+      source     TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_reflections_match
+      ON reflections (match_id, created_at);
+
+    -- Coaching chat sessions (spec 005). Many per match; turns_json holds the
+    -- ChatTurn[] including embedded ActionProposals and their resolutions.
+    -- Rows are created lazily on the first persisted player turn.
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id         TEXT PRIMARY KEY,
+      match_id   TEXT NOT NULL,
+      title      TEXT NOT NULL,
+      turns_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_chat_sessions_match
+      ON chat_sessions (match_id, created_at);
+
+    -- Idempotent legacy adoption (spec 005): each spec-004 transcript becomes
+    -- its match's first session; each finalized reflection becomes the first
+    -- reflection row. Deterministic '-legacy' ids + OR IGNORE make re-runs
+    -- no-ops, so this is safe to execute on every startup. chat_transcripts is
+    -- retained as the migration source but no feature code reads or writes it.
+    INSERT OR IGNORE INTO chat_sessions (id, match_id, title, turns_json, created_at, updated_at)
+      SELECT match_id || '-sess-legacy', match_id, 'First session', json, updated_at, updated_at
+      FROM chat_transcripts
+      WHERE json IS NOT NULL AND json != '[]' AND json != '';
+
+    INSERT OR IGNORE INTO reflections (id, match_id, text, refs_json, source, created_at, updated_at)
+      SELECT match_id || '-refl-legacy', match_id, reflection, '[]', 'coach', updated_at, updated_at
+      FROM chat_transcripts
+      WHERE reflection IS NOT NULL AND trim(reflection) != '';
   `)
 }
