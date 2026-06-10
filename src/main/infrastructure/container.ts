@@ -37,6 +37,9 @@ import { SaveChatTranscript } from '../application/commands/SaveChatTranscript'
 import { GetChatSessions } from '../application/queries/GetChatSessions'
 import { SaveChatSession } from '../application/commands/SaveChatSession'
 import { ResolveProposal } from '../application/commands/ResolveProposal'
+import { SaveReflection } from '../application/commands/SaveReflection'
+import { DeleteReflection } from '../application/commands/DeleteReflection'
+import { ListReflections } from '../application/queries/ListReflections'
 import { GetSessionGoal } from '../application/queries/GetSessionGoal'
 import { SaveSessionGoal } from '../application/commands/SaveSessionGoal'
 import { SqliteCoachingConfigRepository } from '../adapters/driven/sqlite/SqliteCoachingConfigRepository'
@@ -142,6 +145,9 @@ export function buildContainer() {
     chatSessionRepo,
     reflectionRepo
   )
+  const saveReflection = new SaveReflection(matchRepo, reportRepo, reflectionRepo)
+  const deleteReflection = new DeleteReflection(reflectionRepo)
+  const listReflections = new ListReflections(reflectionRepo)
   const finalizeReflection = new FinalizeReflection(
     matchRepo,
     reportRepo,
@@ -197,6 +203,9 @@ export function buildContainer() {
     getChatSessions,
     saveChatSession,
     resolveProposal,
+    saveReflection,
+    deleteReflection,
+    listReflections,
     analyzeSession,
     getSessionAnalysis,
     getSessionGoal,

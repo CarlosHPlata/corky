@@ -19,7 +19,10 @@ import type { SaveChatTranscript } from '../../application/commands/SaveChatTran
 import type { GetChatSessions } from '../../application/queries/GetChatSessions'
 import type { SaveChatSession } from '../../application/commands/SaveChatSession'
 import type { ResolveProposal } from '../../application/commands/ResolveProposal'
-import type { ResolveProposalInput } from '@shared/types'
+import type { SaveReflection } from '../../application/commands/SaveReflection'
+import type { DeleteReflection } from '../../application/commands/DeleteReflection'
+import type { ListReflections } from '../../application/queries/ListReflections'
+import type { ResolveProposalInput, SaveReflectionInput } from '@shared/types'
 import type { ChatTranscriptRepository } from '../../application/ports/ChatTranscriptRepository'
 import type { AnalyzeMatchOptions, ChatTurn } from '@shared/types'
 import type { GetSessionAnalysis } from '../../application/queries/GetSessionAnalysis'
@@ -52,6 +55,9 @@ export function registerIpcHandlers(deps: {
   getChatSessions: GetChatSessions
   saveChatSession: SaveChatSession
   resolveProposal: ResolveProposal
+  saveReflection: SaveReflection
+  deleteReflection: DeleteReflection
+  listReflections: ListReflections
   /** Direct repo dep: the finalize handler and the reflection-save channel
    * persist the written reflection alongside the transcript. */
   chatTranscriptRepo: ChatTranscriptRepository
@@ -109,6 +115,18 @@ export function registerIpcHandlers(deps: {
 
   ipcMain.handle('proposal:resolve', (_event, input: ResolveProposalInput) => {
     return deps.resolveProposal.execute(input)
+  })
+
+  ipcMain.handle('reflections:list', (_event, matchId: string) => {
+    return deps.listReflections.execute(matchId)
+  })
+
+  ipcMain.handle('reflections:save', (_event, input: SaveReflectionInput) => {
+    return deps.saveReflection.execute(input)
+  })
+
+  ipcMain.handle('reflections:delete', (_event, matchId: string, reflectionId: string) => {
+    deps.deleteReflection.execute(matchId, reflectionId)
   })
 
   ipcMain.handle(

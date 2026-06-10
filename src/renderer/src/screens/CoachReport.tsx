@@ -9,10 +9,12 @@ import { StatBlock } from '../components/core/StatBlock'
 import { Button } from '../components/core/Button'
 import { ChampAvatar } from '../components/ChampAvatar'
 import { CoachChat } from '../components/CoachChat'
+import { ReflectionsPanel } from '../components/coaching/ReflectionsPanel'
 import { Askable, AskBadge, type AddRef } from '../components/coaching/AskRef'
 import { Icon } from '../components/Icon'
 import { useMatchReport } from '../data/useMatchReport'
 import { useMatchAnalysis } from '../data/useMatchAnalysis'
+import { useReflections } from '../data/useReflections'
 import { formatDuration, queueLabel } from '../utils/format'
 import type {
   MatchReport, MatchCore, Matchup as MatchupData, Breakdown as BreakdownData,
@@ -490,6 +492,11 @@ export function CoachReport({ matchId, onAnalyzed }: {
   }, [setPending])
   const clearRefs = useCallback(() => { setPending([]) }, [setPending])
 
+  // Reflections — the player's takeaways for this game (spec 005). Manual
+  // authoring is model-free; coach-authored ones land via accepted proposals,
+  // so the chat pings `reload` when one of its accepts touched the list.
+  const reflectionsApi = useReflections(matchId)
+
   // Pin / save the game.
   const [pinned, setPinned] = useState(() => loadPins().includes(matchId))
   useEffect(() => { setPinned(loadPins().includes(matchId)) }, [matchId])
@@ -698,17 +705,32 @@ export function CoachReport({ matchId, onAnalyzed }: {
           : <GatedBlock title="How you did on last game’s focus tasks" hint="Analysis checks this game against the tasks Corky set you last time." analyzing={analyzing} onAnalyze={runAnalyze} />}
       </section>
 
+      {/* Reflections — the player's takeaways for this game (spec 005). Not
+          gated on analysis: manual authoring needs no model and works offline. */}
+      <section>
+        <SectionLabel icon="bookmark">Reflections</SectionLabel>
+        <ReflectionsPanel
+          reflections={reflectionsApi.reflections}
+          pendingRefs={pendingRefs}
+          onSave={reflectionsApi.save}
+          onDelete={reflectionsApi.remove}
+          onRemoveRef={removeRef}
+          onClearRefs={clearRefs}
+        />
+      </section>
+
       {/* Coach Corky — a live coaching chat, only once Corky's read is in. The
-          briefing (this game + Corky's read + your goal) is rebuilt server-side
-          on open, so the chat coaches off THIS game. "Save reflection" writes the
-          reflection from the conversation and may re-shape the focus tasks. */}
+          briefing (this game + Corky's read + your goal + reflections) is rebuilt
+          server-side on open, so the chat coaches off THIS game. The coach can
+          PROPOSE task and reflection changes; nothing applies until accepted. */}
       {analyzed && (
         <section>
           <SectionLabel icon="message-circle">Coach Corky</SectionLabel>
           {/* Keyed by match: an in-flight reply for game A must never land in
               game B's mounted transcript (the remount drops the continuation). */}
           <CoachChat key={matchId} matchId={matchId} core={core} review={review} standing={tasks?.standing ?? []}
-            onTasksUpdated={apply} pendingRefs={pendingRefs} onRemoveRef={removeRef} onClearRefs={clearRefs} />
+            onTasksUpdated={apply} onReflectionsChanged={reflectionsApi.reload}
+            pendingRefs={pendingRefs} onRemoveRef={removeRef} onClearRefs={clearRefs} />
         </section>
       )}
     </div>

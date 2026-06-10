@@ -610,6 +610,13 @@ export interface IpcApi {
   /** Resolve one embedded proposal exactly once: accept applies it (validated
    * against current state — may come back 'stale'), reject discards (spec 005). */
   resolveProposal: (input: ResolveProposalInput) => Promise<ResolveProposalOutcome>
+  /** This match's reflections, oldest first (spec 005). */
+  listReflections: (matchId: string) => Promise<Reflection[]>
+  /** Create (id absent) or edit (id present) a reflection manually — no model
+   * call; the server trims, caps and filters refs (spec 005). */
+  saveReflection: (input: SaveReflectionInput) => Promise<Reflection>
+  /** Hard-delete one reflection; deleting a missing id is a no-op (spec 005). */
+  deleteReflection: (matchId: string, reflectionId: string) => Promise<void>
   /** Finalise the coaching session: Corky writes the reflection and may adjust the
    * standing focus tasks. Persists task changes; returns the written reflection. */
   finalizeReflection: (matchId: string, messages: ChatTurn[]) => Promise<ReflectionOutcome>

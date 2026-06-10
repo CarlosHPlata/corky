@@ -449,6 +449,16 @@ code, kbd, samp, pre { font-family: var(--font-mono); }
 .ckp-actions { display: flex; gap: 8px; padding: 0 12px 12px; }
 .ckp-stale-hint { margin: 0; padding: 0 12px 12px; font-family: var(--font-sans); font-size: 12px; color: var(--text-faint); }
 
+/* ---------- Reflections panel (spec 005) ------------------- */
+.ckr-item { padding: 10px 12px; background: var(--bg-card-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.ckr-act {
+  display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--radius-sm);
+  border: none; background: transparent; color: var(--text-faint); cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.ckr-act:hover { color: var(--text-primary); background: var(--bg-card); }
+.ckr-act--danger:hover { color: var(--loss, #e05c5c); }
+
 /* ---------- Button ---------------------------------------- */
 .ck-btn {
   --_bg: var(--accent);

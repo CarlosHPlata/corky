@@ -4,7 +4,8 @@ import type {
   SummonerProfile, LpSnapshot, CoachReport, SessionAnalysis,
   SessionGoal, SessionGoalInput, MatchAnalysis, AnalyzeMatchOptions,
   ChatTurn, CoachChatReply, ReflectionOutcome, StandingFocusTask, ProgressSummary,
-  ChatSession, ChatSessionMeta, ResolveProposalInput, ResolveProposalOutcome
+  ChatSession, ChatSessionMeta, ResolveProposalInput, ResolveProposalOutcome,
+  Reflection, SaveReflectionInput
 } from '../shared/types'
 import type { ResolvedCoachingConfig, SaveCoachingConfigInput } from '../shared/config'
 
@@ -26,6 +27,12 @@ const api: IpcApi = {
     ipcRenderer.invoke('coach:chat', matchId, sessionId, messages),
   resolveProposal: (input: ResolveProposalInput): Promise<ResolveProposalOutcome> =>
     ipcRenderer.invoke('proposal:resolve', input),
+  listReflections: (matchId: string): Promise<Reflection[]> =>
+    ipcRenderer.invoke('reflections:list', matchId),
+  saveReflection: (input: SaveReflectionInput): Promise<Reflection> =>
+    ipcRenderer.invoke('reflections:save', input),
+  deleteReflection: (matchId: string, reflectionId: string): Promise<void> =>
+    ipcRenderer.invoke('reflections:delete', matchId, reflectionId),
   finalizeReflection: (matchId: string, messages: ChatTurn[]): Promise<ReflectionOutcome> =>
     ipcRenderer.invoke('coach:reflection:finalize', matchId, messages),
   getStandingTasks: (): Promise<StandingFocusTask[]> => ipcRenderer.invoke('tasks:standing:get'),

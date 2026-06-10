@@ -101,8 +101,12 @@ export function useChatSession(matchId: string, opener: ChatTurn): ChatSessionAp
         if (!refl) {
           const legacyRefl = loadLegacyReflection(reflectKey)
           if (legacyRefl) {
+            // Adopt into the reflections store (spec 005) — the deterministic
+            // legacy id makes repeats no-ops, same as the schema migration.
             try {
-              await window.api.saveChatReflection(matchId, legacyRefl)
+              await window.api.saveReflection({
+                matchId, id: `${matchId}-refl-legacy`, text: legacyRefl, refs: []
+              })
               localStorage.removeItem(reflectKey)
               refl = legacyRefl
             } catch { /* retries next open */ }

@@ -66,7 +66,7 @@ function refChipLabel(r: EvidenceRef): string {
   return r.label ?? r.id.replace(/^(stat|marker|task):/, '').replace(/[_#]/g, ' ').trim()
 }
 
-export function CoachChat({ matchId, core, review, standing = [], onTasksUpdated, pendingRefs, onRemoveRef, onClearRefs }: {
+export function CoachChat({ matchId, core, review, standing = [], onTasksUpdated, onReflectionsChanged, pendingRefs, onRemoveRef, onClearRefs }: {
   matchId: string
   core: MatchCore
   review: ReviewOutput | null
@@ -74,6 +74,8 @@ export function CoachChat({ matchId, core, review, standing = [], onTasksUpdated
    * resolve retired descriptions against them. */
   standing?: StandingFocusTask[]
   onTasksUpdated?: (analysis: MatchAnalysis) => void
+  /** An accepted proposal touched the reflections list — the panel re-reads. */
+  onReflectionsChanged?: () => void
   /** Evidence the player picked off the report, waiting to ride the next message.
    * Owned by the report screen (every report element can add); rendered, removed
    * and consumed here. */
@@ -116,9 +118,15 @@ export function CoachChat({ matchId, core, review, standing = [], onTasksUpdated
     await session.send(text, refs)
   }
 
-  async function resolveProposal(proposalId: string, decision: 'accept' | 'reject'): Promise<void> {
+  async function resolveProposal(
+    proposalId: string,
+    decision: 'accept' | 'reject',
+    kind: string
+  ): Promise<void> {
     const outcome = await session.resolve(proposalId, decision)
-    if (outcome?.resolution === 'accepted' && outcome.analysis) onTasksUpdated?.(outcome.analysis)
+    if (outcome?.resolution !== 'accepted') return
+    if (outcome.analysis) onTasksUpdated?.(outcome.analysis)
+    if (kind !== 'update_tasks') onReflectionsChanged?.()
   }
 
   async function finalize(): Promise<void> {
@@ -243,8 +251,8 @@ export function CoachChat({ matchId, core, review, standing = [], onTasksUpdated
                   proposal={x.proposal}
                   retiring={x.proposal.payload.kind === 'update_tasks' ? retiringFor(x.proposal.payload.retireIds) : []}
                   busy={resolving}
-                  onAccept={() => resolveProposal(x.proposal!.id, 'accept')}
-                  onReject={() => resolveProposal(x.proposal!.id, 'reject')}
+                  onAccept={() => resolveProposal(x.proposal!.id, 'accept', x.proposal!.payload.kind)}
+                  onReject={() => resolveProposal(x.proposal!.id, 'reject', x.proposal!.payload.kind)}
                 />
               )}
             </div>
