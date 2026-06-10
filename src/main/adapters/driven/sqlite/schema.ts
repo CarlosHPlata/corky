@@ -187,5 +187,17 @@ export function runMigrations(db: Database.Database): void {
       json       TEXT NOT NULL,
       updated_at INTEGER
     );
+
+    -- Durable coaching-session transcripts, one row per match (formerly renderer
+    -- localStorage — longitudinal coaching data belongs here). json holds the
+    -- ChatTurn[] (incl. evidence refs); reflection holds the finalized
+    -- reflection text once written. Each side of the row upserts independently:
+    -- saving turns preserves the reflection and vice versa.
+    CREATE TABLE IF NOT EXISTS chat_transcripts (
+      match_id   TEXT PRIMARY KEY,
+      json       TEXT NOT NULL,
+      reflection TEXT,
+      updated_at INTEGER NOT NULL
+    );
   `)
 }

@@ -165,3 +165,59 @@ describe('diffOverrides', () => {
     ).toEqual(diffOverrides(desired))
   })
 })
+
+describe('coachingConfig — prompt instructions', () => {
+  const REVIEW_DEFAULT = resolveConfig(null).prompts.find((p) => p.id === 'review')!.instructions
+
+  it('resolves every registry prompt with its default text and no flags', () => {
+    const prompts = resolveConfig(null).prompts
+    expect(prompts.length).toBeGreaterThanOrEqual(7)
+    for (const p of prompts) {
+      expect(p.instructions.length).toBeGreaterThan(0)
+      expect(p.modified).toBe(false)
+      expect(p.staleDefault).toBe(false)
+    }
+  })
+
+  it('round-trips an edited prompt through diff → resolve', () => {
+    const overrides = diffOverrides({
+      ...defaultDesired(),
+      prompts: { review: 'Be extremely gentle and encouraging.' }
+    })
+    expect(overrides.prompts?.review?.text).toBe('Be extremely gentle and encouraging.')
+    const resolved = resolveConfig(overrides)
+    const review = resolved.prompts.find((p) => p.id === 'review')!
+    expect(review.instructions).toBe('Be extremely gentle and encouraging.')
+    expect(review.modified).toBe(true)
+    expect(review.staleDefault).toBe(false)
+    expect(resolved.modified).toBe(true)
+  })
+
+  it('default-equal and blank texts store no override (restore by equality)', () => {
+    const same = diffOverrides({ ...defaultDesired(), prompts: { review: REVIEW_DEFAULT } })
+    expect(same.prompts).toBeUndefined()
+    expect(isEmptyOverrides(same)).toBe(true)
+    const blank = diffOverrides({ ...defaultDesired(), prompts: { review: '   ' } })
+    expect(blank.prompts).toBeUndefined()
+  })
+
+  it('flags staleDefault when the stored baseHash no longer matches the default', () => {
+    const overrides: CoachingConfigOverrides = {
+      version: 1,
+      prompts: { review: { text: 'Custom voice.', baseHash: 'deadbeef' } }
+    }
+    const review = resolveConfig(overrides).prompts.find((p) => p.id === 'review')!
+    expect(review.modified).toBe(true)
+    expect(review.staleDefault).toBe(true)
+  })
+
+  it('drops unknown prompt ids on resolve and diff', () => {
+    const overrides: CoachingConfigOverrides = {
+      version: 1,
+      prompts: { nonsense: { text: 'x', baseHash: '0' } }
+    }
+    expect(resolveConfig(overrides).modified).toBe(false)
+    const diffed = diffOverrides({ ...defaultDesired(), prompts: { nonsense: 'x' } })
+    expect(diffed.prompts).toBeUndefined()
+  })
+})

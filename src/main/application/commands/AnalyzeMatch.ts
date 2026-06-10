@@ -8,9 +8,11 @@ import type { ReportRepository } from '../ports/ReportRepository'
 import type { MatchCoachingModel, BenchmarkRef } from '../ports/MatchCoachingModel'
 import type { BenchmarkDataSource } from '../ports/BenchmarkDataSource'
 import type { SessionGoalRepository } from '../ports/SessionGoalRepository'
+import type { CoachingConfigRepository } from '../ports/CoachingConfigRepository'
 import { assembleMatchReport } from '../../domain/report/assembleMatchReport'
 import { buildAnchorCatalog, isValidStructuredRef, type AnchorCatalog } from '../../domain/report/anchorCatalog'
-import { toCompactContext } from '../../domain/report/compactContext'
+import { renderContextBlocks } from '../../domain/report/contextBlocks'
+import { resolveConfig } from '../../domain/config/coachingConfig'
 import { resolveGeneralBenchmark } from '../../domain/benchmark'
 import { computeMetric, METRIC_KEYS } from '../../domain/report/metricRegistry'
 import { evaluateTask } from '../../domain/report/taskEvaluation'
@@ -38,6 +40,7 @@ export class AnalyzeMatch {
     private readonly model: MatchCoachingModel,
     private readonly benchmarkSource: BenchmarkDataSource,
     private readonly goalRepo: SessionGoalRepository,
+    private readonly coachingConfigRepo: CoachingConfigRepository,
     private readonly lightModel: string,
     private readonly heavyModel: string,
     private readonly now: () => number = () => Date.now()
@@ -62,7 +65,27 @@ export class AnalyzeMatch {
 
     const report = assembleMatchReport(rawMatch, rawTimeline, account.puuid)
     const catalog = buildAnchorCatalog(report)
-    const ctx = toCompactContext(report, catalog)
+
+    // Resolve the coaching config once (FR — settings): a block feeds the model
+    // only when it is enabled AND its required source (if any) is enabled.
+    // alwaysOn blocks survive regardless (renderContextBlocks guarantees it).
+    const config = resolveConfig(this.coachingConfigRepo.get())
+    const disabledSources = new Set(config.sources.filter((s) => !s.enabled).map((s) => s.id))
+    const enabledIds = new Set(
+      config.blocks
+        .filter((b) => b.enabled && !(b.requiresSource && disabledSources.has(b.requiresSource)))
+        .map((b) => b.id)
+    )
+
+    // Stated-intent extras are gated here too, so a disabled goal/reflection
+    // never leaks through the per-pass extras render paths either.
+    const goal = enabledIds.has('player.goal')
+      ? this.goalRepo.get()?.goal?.trim() || undefined
+      : undefined
+    const reflection = enabledIds.has('player.reflection')
+      ? opts.reflection?.trim() || undefined
+      : undefined
+    const ctx = renderContextBlocks(report, catalog, { goal, reflection }, enabledIds)
 
     // Retry-fill: reuse a stored 'done' section unless forced.
     const existing = opts.force ? null : this.reportRepo.getMatchAnalysis(matchId)
@@ -82,8 +105,12 @@ export class AnalyzeMatch {
     ])
 
     // Pass 3 (heavy tier) — the prose verdict, fed compact outputs + benchmark + intent.
-    const benchmark = await this.resolveBenchmark(account.puuid, report.core.champion, report.core.role)
-    const goal = this.goalRepo.get()?.goal?.trim() || undefined
+    const benchmark = await this.resolveBenchmark(
+      account.puuid,
+      report.core.champion,
+      report.core.role,
+      enabledIds.has('match.benchmark')
+    )
     const review = await this.runPass<ReviewOutput>('review', reuse('review') as ReviewOutput | undefined, () =>
       this.model.analyzeReview(
         ctx,
@@ -92,7 +119,7 @@ export class AnalyzeMatch {
           narration: narration.value ? summarizeNarration(narration.value) : '',
           benchmark,
           goal,
-          reflection: opts.reflection?.trim() || undefined
+          reflection
         },
         this.heavyModel
       )
@@ -143,12 +170,21 @@ export class AnalyzeMatch {
     }
   }
 
-  /** Resolve the OP.GG champion benchmark; fall back to the general per-rank ref. */
-  private async resolveBenchmark(puuid: string, champion: string, role: string): Promise<BenchmarkRef> {
+  /**
+   * Resolve the OP.GG champion benchmark; fall back to the general per-rank ref.
+   * With `useOpgg` false (source/block disabled in settings) the fetch is skipped
+   * entirely and we degrade exactly as a failed fetch does: the general fallback.
+   */
+  private async resolveBenchmark(
+    puuid: string,
+    champion: string,
+    role: string,
+    useOpgg: boolean
+  ): Promise<BenchmarkRef> {
     const tier = this.summonerRepo.getProfile(puuid)?.soloRank?.tier ?? null
-    const champ = await this.benchmarkSource
-      .getChampionBenchmark({ champion, role, tier })
-      .catch(() => null)
+    const champ = useOpgg
+      ? await this.benchmarkSource.getChampionBenchmark({ champion, role, tier }).catch(() => null)
+      : null
     if (champ) {
       return { metric: 'cs_per_min', basis: champ.basis, ref: champ.csPerMin, patch: champ.patch }
     }

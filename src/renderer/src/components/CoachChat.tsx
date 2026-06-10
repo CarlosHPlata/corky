@@ -14,33 +14,31 @@ import type { MatchCore, ReviewOutput, MatchAnalysis, ChatTurn, EvidenceRef } fr
 // knows this match's facts and Corky's own read (the briefing is rebuilt in the
 // main process per call — no secrets cross preload). "Save reflection" asks Corky
 // to write the reflection in the player's voice AND, if the talk warrants it,
-// re-shape the standing focus tasks. The written reflection persists to the SAME
-// renderer-local store the old notepad used (ck-postreflect-<id>); the task
-// change is persisted server-side and handed back so the report re-renders.
+// re-shape the standing focus tasks. The transcript and the written reflection
+// are longitudinal coaching data, so both persist to SQLite in the main process
+// (chat:transcript:* / chat:reflection:save); the task change is persisted
+// server-side and handed back so the report re-renders.
 
 type View = 'chat' | 'done'
 
 // ---------------------------------------------------------------- persistence
-function loadChat(key: string): ChatTurn[] | null {
+// Sessions now live in the main process. These localStorage readers survive
+// only to adopt transcripts/reflections the old renderer-local store held
+// (ck-chat-<id> / ck-postreflect-<id>); once migrated the keys are removed.
+function loadLegacyChat(key: string): ChatTurn[] | null {
   try {
     const v = JSON.parse(localStorage.getItem(key) || 'null')
-    return Array.isArray(v) ? v : null
+    return Array.isArray(v) && v.length > 0 ? v : null
   } catch {
     return null
   }
 }
-function saveChat(key: string, msgs: ChatTurn[]): void {
-  try { localStorage.setItem(key, JSON.stringify(msgs)) } catch { /* ignore */ }
-}
-function loadReflection(key: string): string {
+function loadLegacyReflection(key: string): string {
   try {
     const raw = localStorage.getItem(key)
     if (raw) { const v = JSON.parse(raw); return typeof v === 'string' ? v : (v?.text || '') }
   } catch { /* ignore */ }
   return ''
-}
-function saveReflection(key: string, text: string): void {
-  try { localStorage.setItem(key, JSON.stringify(text)) } catch { /* ignore */ }
 }
 
 // Corky is told to avoid markdown, but models slip — strip stray emphasis/bullets
@@ -95,31 +93,66 @@ export function CoachChat({ matchId, core, review, onTasksUpdated, pendingRefs, 
   const reflectKey = 'ck-postreflect-' + matchId
   const opener = useMemo<ChatTurn>(() => ({ role: 'assistant', text: buildOpener(core, review) }), [matchId])
 
-  const [msgs, setMsgs] = useState<ChatTurn[]>(() => loadChat(chatKey) || [opener])
+  const [msgs, setMsgs] = useState<ChatTurn[]>([opener])
   const [draft, setDraft] = useState('')
   const [thinking, setThinking] = useState(false)
-  const [reflection, setReflection] = useState<string>(() => loadReflection(reflectKey))
+  const [reflection, setReflection] = useState<string>('')
   const [finalizing, setFinalizing] = useState(false)
-  const [view, setView] = useState<View>(() => (loadReflection(reflectKey) ? 'done' : 'chat'))
+  const [view, setView] = useState<View>('chat')
   const [editing, setEditing] = useState(false)
   const [editDraft, setEditDraft] = useState('')
   const threadRef = useRef<HTMLDivElement>(null)
+  // Which match's stored session has finished loading. Guards the persistence
+  // effect (and sends) so a stored transcript is never clobbered by the opener.
+  const hydratedFor = useRef<string | null>(null)
 
-  // Reset everything when the game changes.
+  // Reset + hydrate from the main process when the game changes. If the store
+  // has nothing for this match but the old renderer-local store does, adopt it
+  // once (saving it through IPC) and drop the legacy keys.
   useEffect(() => {
-    setMsgs(loadChat(chatKey) || [opener])
-    const ref = loadReflection(reflectKey)
-    setReflection(ref); setView(ref ? 'done' : 'chat'); setDraft(''); setThinking(false); setEditing(false)
+    hydratedFor.current = null
+    setMsgs([opener]); setReflection(''); setView('chat')
+    setDraft(''); setThinking(false); setEditing(false)
+    let alive = true
+    void (async () => {
+      let stored: { turns: ChatTurn[]; reflection: string | null } | null = null
+      try { stored = await window.api.getChatTranscript(matchId) } catch { /* fall through to legacy */ }
+      let turns = stored && stored.turns.length > 0 ? stored.turns : null
+      let refl = stored?.reflection ?? ''
+      if (!turns && !refl) {
+        const legacyTurns = loadLegacyChat(chatKey)
+        const legacyRefl = loadLegacyReflection(reflectKey)
+        if (legacyTurns || legacyRefl) {
+          turns = legacyTurns; refl = legacyRefl
+          try {
+            if (legacyTurns) await window.api.saveChatTranscript(matchId, legacyTurns)
+            if (legacyRefl) await window.api.saveChatReflection(matchId, legacyRefl)
+            localStorage.removeItem(chatKey); localStorage.removeItem(reflectKey)
+          } catch { /* keys stay put; migration retries next open */ }
+        }
+      }
+      if (!alive) return
+      setMsgs(turns || [opener])
+      setReflection(refl)
+      setView(refl ? 'done' : 'chat')
+      hydratedFor.current = matchId
+    })()
+    return () => { alive = false }
   }, [matchId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { saveChat(chatKey, msgs) }, [msgs, chatKey])
+  // Persist the transcript whenever it changes (post-send, post-reply) — but
+  // only once this match's session has hydrated.
+  useEffect(() => {
+    if (hydratedFor.current !== matchId) return
+    window.api.saveChatTranscript(matchId, msgs).catch(() => { /* next change retries */ })
+  }, [msgs, matchId])
   useEffect(() => {
     const el = threadRef.current; if (el && view === 'chat') el.scrollTop = el.scrollHeight
   }, [msgs, thinking, view])
 
   async function send(textArg?: string): Promise<void> {
     const text = (textArg != null ? textArg : draft).trim()
-    if (!text || thinking) return
+    if (!text || thinking || hydratedFor.current !== matchId) return
     // Attach the pending report references to this turn (the main process grounds
     // them against the anchor catalog), then clear them — they've been spent.
     const refs = pendingRefs && pendingRefs.length > 0 ? pendingRefs.slice(0, 5) : undefined
@@ -137,13 +170,16 @@ export function CoachChat({ matchId, core, review, onTasksUpdated, pendingRefs, 
   }
 
   async function finalize(): Promise<void> {
-    if (finalizing || thinking) return
+    if (finalizing || thinking || hydratedFor.current !== matchId) return
     setFinalizing(true)
     try {
       const outcome = await window.api.finalizeReflection(matchId, msgs)
       const text = clean(outcome.reflection)
       if (text) {
-        setReflection(text); saveReflection(reflectKey, text); setView('done')
+        setReflection(text); setView('done')
+        // Finalize persisted the raw model text server-side; store the cleaned
+        // version the player actually sees so reload shows the same thing.
+        window.api.saveChatReflection(matchId, text).catch(() => { /* raw copy stands */ })
         if (outcome.tasksUpdated && outcome.analysis) onTasksUpdated?.(outcome.analysis)
       }
     } catch {
@@ -165,7 +201,11 @@ export function CoachChat({ matchId, core, review, onTasksUpdated, pendingRefs, 
 
   // ---- finalized reflection view (read-only / editable) ----
   if (view === 'done') {
-    const commitEdit = (): void => { const t = editDraft.trim(); setReflection(t); saveReflection(reflectKey, t); setEditing(false) }
+    const commitEdit = (): void => {
+      const t = editDraft.trim()
+      setReflection(t); setEditing(false)
+      window.api.saveChatReflection(matchId, t).catch(() => { /* in-memory edit stands */ })
+    }
     return (
       <Card accent="accent" padding={0} className="ckc-card">
         <div className="ckc-head">

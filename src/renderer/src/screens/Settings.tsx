@@ -4,7 +4,7 @@ import { Toggle } from '../components/core/Toggle'
 import { Button } from '../components/core/Button'
 import { Icon } from '../components/Icon'
 import type { SummonerProfile } from '@shared/types'
-import type { BudgetTier, ContextBlockInfo, DataSourceInfo, ResolvedCoachingConfig } from '@shared/config'
+import type { BudgetTier, ContextBlockInfo, DataSourceInfo, PromptInfo, ResolvedCoachingConfig } from '@shared/config'
 import { rankLabel } from '../utils/format'
 import { useCoachingConfig } from '../data/useCoachingConfig'
 
@@ -311,8 +311,113 @@ function ContextBlocksCard({ config, loading, setBlock, setTier }: {
   )
 }
 
+/* ---------- Coach prompts (the editable instructions layer) ------------- */
+
+function PromptBadge({ text, warn = false }: { text: string; warn?: boolean }) {
+  return (
+    <span style={{
+      ...monoChipStyle,
+      color: warn ? 'var(--loss, #e25f5f)' : 'var(--gold-300)',
+      borderColor: warn ? 'rgba(226,95,95,0.35)' : 'rgba(242,179,61,0.28)',
+    }}>
+      {text}
+    </span>
+  )
+}
+
+function PromptRow({ prompt, onSave, onRestore }: {
+  prompt: PromptInfo
+  onSave: (text: string) => void
+  onRestore: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState(prompt.instructions)
+
+  // Adopt server-resolved text whenever it changes (saves and restores round-trip).
+  useEffect(() => { setDraft(prompt.instructions) }, [prompt.instructions])
+
+  const commit = () => {
+    if (draft.trim() !== prompt.instructions.trim()) onSave(draft)
+  }
+
+  return (
+    <div style={{ borderBottom: '1px solid var(--border-subtle)', padding: '11px 0' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+          width: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left',
+        }}
+      >
+        <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--text-secondary)' }}>{prompt.label}</span>
+            {prompt.modified && <PromptBadge text="edited" />}
+            {prompt.staleDefault && <PromptBadge text="default updated" warn />}
+          </span>
+          <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, lineHeight: 1.45, color: 'var(--text-muted)' }}>{prompt.description}</span>
+        </span>
+        <span aria-hidden style={{ flex: 'none', fontSize: 12, color: 'var(--text-faint)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform var(--dur-fast) var(--ease-out)' }}>
+          ▸
+        </span>
+      </button>
+      {open && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 10 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-sans)', fontSize: 11.5, color: 'var(--text-faint)' }}>
+            <Icon name="lock" size={12} style={{ flex: 'none' }} />
+            Output contracts (JSON, evidence citations) are managed by Corky and can&apos;t be edited.
+          </span>
+          <textarea
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={commit}
+            rows={Math.max(4, Math.ceil(draft.length / 90))}
+            spellCheck={false}
+            style={{
+              ...fieldStyle, width: '100%', boxSizing: 'border-box', resize: 'vertical',
+              lineHeight: 1.5, fontSize: 12.5,
+            }}
+          />
+          {prompt.modified && (
+            <div>
+              <Button variant="ghost" size="sm" onClick={onRestore}>Restore default</Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CoachPromptsCard({ config, loading, setPromptInstructions, restorePrompt }: {
+  config: ResolvedCoachingConfig | null
+  loading: boolean
+  setPromptInstructions: (id: string, text: string) => void
+  restorePrompt: (id: string) => void
+}) {
+  return (
+    <Card title="Coach prompts" eyebrow="How Corky talks — the data contract stays managed by the app" padding={18}>
+      {!config
+        ? <LoadingRows message={loading ? 'Loading…' : 'Configuration unavailable.'} />
+        : config.prompts.map(p => (
+            <PromptRow
+              key={p.id}
+              prompt={p}
+              onSave={text => setPromptInstructions(p.id, text)}
+              onRestore={() => restorePrompt(p.id)}
+            />
+          ))}
+    </Card>
+  )
+}
+
 export function Settings() {
-  const { config, loading, setSource, setBlock, setTier, restoreDefaults } = useCoachingConfig()
+  const {
+    config, loading, setSource, setBlock, setTier,
+    setPromptInstructions, restorePrompt, restoreDefaults
+  } = useCoachingConfig()
 
   return (
     <div className="ck-fade" style={{ padding: '22px 18px', maxWidth: 680, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -321,6 +426,12 @@ export function Settings() {
       </Card>
       <DataSourcesCard config={config} loading={loading} setSource={setSource} />
       <ContextBlocksCard config={config} loading={loading} setBlock={setBlock} setTier={setTier} />
+      <CoachPromptsCard
+        config={config}
+        loading={loading}
+        setPromptInstructions={setPromptInstructions}
+        restorePrompt={restorePrompt}
+      />
       <div>
         <Button variant="danger" size="sm" disabled={!config?.modified} onClick={restoreDefaults}>
           Restore all defaults

@@ -12,6 +12,9 @@ export interface UseCoachingConfig {
   setSource: (id: string, on: boolean) => void
   setBlock: (id: string, on: boolean) => void
   setTier: (tier: BudgetTier) => void
+  setPromptInstructions: (id: string, text: string) => void
+  /** Back to the hardcoded default — a blank text stores no override. */
+  restorePrompt: (id: string) => void
   restoreDefaults: () => void
 }
 
@@ -21,7 +24,9 @@ function toInput(config: ResolvedCoachingConfig): SaveCoachingConfigInput {
   for (const s of config.sources) sources[s.id] = s.enabled
   const blocks: Record<string, boolean> = {}
   for (const b of config.blocks) blocks[b.id] = b.enabled
-  return { sources, blocks, budgetTier: config.budgetTier }
+  const prompts: Record<string, string> = {}
+  for (const p of config.prompts) prompts[p.id] = p.instructions
+  return { sources, blocks, budgetTier: config.budgetTier, prompts }
 }
 
 /**
@@ -98,10 +103,30 @@ export function useCoachingConfig(): UseCoachingConfig {
     [config, save],
   )
 
+  const setPromptInstructions = useCallback(
+    (id: string, text: string) => {
+      if (!config) return
+      const input = toInput(config)
+      input.prompts[id] = text
+      save(input)
+    },
+    [config, save],
+  )
+
+  const restorePrompt = useCallback(
+    (id: string) => {
+      if (!config) return
+      const input = toInput(config)
+      input.prompts[id] = ''
+      save(input)
+    },
+    [config, save],
+  )
+
   const restoreDefaults = useCallback(() => {
     if (!config) return
     const ok = window.confirm(
-      'Restore all coaching defaults? Sources, data points and budget go back to install settings.',
+      'Restore all coaching defaults? Sources, data points, budget and prompts go back to install settings.',
     )
     if (!ok) return
     setSaving(true)
@@ -118,5 +143,15 @@ export function useCoachingConfig(): UseCoachingConfig {
       })
   }, [config])
 
-  return { config, loading, saving, setSource, setBlock, setTier, restoreDefaults }
+  return {
+    config,
+    loading,
+    saving,
+    setSource,
+    setBlock,
+    setTier,
+    setPromptInstructions,
+    restorePrompt,
+    restoreDefaults
+  }
 }

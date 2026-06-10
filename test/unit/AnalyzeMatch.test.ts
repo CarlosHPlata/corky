@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { AnalyzeMatch } from '../../src/main/application/commands/AnalyzeMatch'
-import type { MatchCoachingModel } from '../../src/main/application/ports/MatchCoachingModel'
+import type { MatchCoachingModel, ReviewExtras } from '../../src/main/application/ports/MatchCoachingModel'
 import type { MatchAnalysis, ReviewOutput } from '../../src/shared/types'
+import type { CoachingConfigOverrides } from '../../src/shared/config'
 import { loadMatch, loadTimeline, PLAYER_PUUID } from '../fixtures/load'
 
 const review: ReviewOutput = {
@@ -29,7 +30,11 @@ function fakeModel(over: Partial<MatchCoachingModel> = {}): MatchCoachingModel {
   }
 }
 
-function deps(model: MatchCoachingModel, stored: MatchAnalysis | null = null) {
+function deps(
+  model: MatchCoachingModel,
+  stored: MatchAnalysis | null = null,
+  opts: { overrides?: CoachingConfigOverrides; goal?: string } = {}
+) {
   const upserts: MatchAnalysis[] = []
   const matchRepo = {
     getCurrentAccount: () => ({ puuid: PLAYER_PUUID, gameName: 'P', tagLine: 'EUW', platform: 'euw1', region: 'europe' }),
@@ -45,10 +50,16 @@ function deps(model: MatchCoachingModel, stored: MatchAnalysis | null = null) {
     retireStandingTasks: () => {},
     insertTaskEvaluation: () => {}
   } as never
-  const benchmarkSource = { getChampionBenchmark: vi.fn().mockResolvedValue(null) } as never
-  const goalRepo = { get: () => null } as never
-  const cmd = new AnalyzeMatch(matchRepo, summonerRepo, reportRepo, model, benchmarkSource, goalRepo, 'haiku', 'opus', () => 123)
-  return { cmd, upserts }
+  const getChampionBenchmark = vi.fn().mockResolvedValue(null)
+  const benchmarkSource = { getChampionBenchmark } as never
+  const goalRepo = { get: () => (opts.goal ? { goal: opts.goal } : null) } as never
+  // Default: no stored overrides ⇒ pure hardcoded defaults (all blocks/sources on).
+  const coachingConfigRepo = { get: () => opts.overrides ?? null, save: () => {}, clear: () => {} } as never
+  const cmd = new AnalyzeMatch(
+    matchRepo, summonerRepo, reportRepo, model, benchmarkSource, goalRepo, coachingConfigRepo,
+    'haiku', 'opus', () => 123
+  )
+  return { cmd, upserts, getChampionBenchmark }
 }
 
 describe('AnalyzeMatch', () => {
@@ -107,8 +118,58 @@ describe('AnalyzeMatch', () => {
       model,
       { getChampionBenchmark: vi.fn().mockResolvedValue(null) } as never,
       { get: () => null } as never,
+      { get: () => null, save: () => {}, clear: () => {} } as never,
       'haiku', 'opus'
     )
     await expect(cmd.execute('NOPE')).rejects.toThrow()
+  })
+
+  it('keeps STAT and MARK lines in the context with the default config', async () => {
+    const analyzeReview = vi.fn().mockResolvedValue(review)
+    const { cmd } = deps(fakeModel({ analyzeReview }))
+    await cmd.execute('WIN_001')
+    const ctx = analyzeReview.mock.calls[0][0] as string
+    expect(ctx).toContain('STAT ')
+    expect(ctx).toContain('MARK ')
+  })
+
+  it('drops STAT lines when match.stats is disabled, keeping GAME/CORE', async () => {
+    const analyzeReview = vi.fn().mockResolvedValue(review)
+    const { cmd } = deps(fakeModel({ analyzeReview }), null, {
+      overrides: { version: 1, blocks: { 'match.stats': false } }
+    })
+    await cmd.execute('WIN_001')
+    const ctx = analyzeReview.mock.calls[0][0] as string
+    expect(ctx).not.toContain('STAT ')
+    expect(ctx).toContain('GAME result=')
+    expect(ctx).toContain('CORE kda=')
+  })
+
+  it('never calls the benchmark source when opgg-mcp is disabled (general fallback)', async () => {
+    const analyzeReview = vi.fn().mockResolvedValue(review)
+    const { cmd, getChampionBenchmark } = deps(fakeModel({ analyzeReview }), null, {
+      overrides: { version: 1, sources: { 'opgg-mcp': false } }
+    })
+    const a = await cmd.execute('WIN_001')
+    expect(getChampionBenchmark).not.toHaveBeenCalled()
+    expect(a.sections.review).toBe('done')
+    const extras = analyzeReview.mock.calls[0][1] as ReviewExtras
+    expect(extras.benchmark?.basis).toBe('general')
+  })
+
+  it('removes the goal NOTE line (and extras goal) when player.goal is disabled', async () => {
+    const withGoal = vi.fn().mockResolvedValue(review)
+    const on = deps(fakeModel({ analyzeReview: withGoal }), null, { goal: 'ward more' })
+    await on.cmd.execute('WIN_001')
+    expect(withGoal.mock.calls[0][0] as string).toContain('NOTE goal=')
+
+    const withoutGoal = vi.fn().mockResolvedValue(review)
+    const off = deps(fakeModel({ analyzeReview: withoutGoal }), null, {
+      goal: 'ward more',
+      overrides: { version: 1, blocks: { 'player.goal': false } }
+    })
+    await off.cmd.execute('WIN_001')
+    expect(withoutGoal.mock.calls[0][0] as string).not.toContain('NOTE goal=')
+    expect((withoutGoal.mock.calls[0][1] as ReviewExtras).goal).toBeUndefined()
   })
 })

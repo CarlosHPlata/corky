@@ -26,6 +26,12 @@ const api: IpcApi = {
   finalizeReflection: (matchId: string, messages: ChatTurn[]): Promise<ReflectionOutcome> =>
     ipcRenderer.invoke('coach:reflection:finalize', matchId, messages),
   getStandingTasks: (): Promise<StandingFocusTask[]> => ipcRenderer.invoke('tasks:standing:get'),
+  getChatTranscript: (matchId: string): Promise<{ turns: ChatTurn[]; reflection: string | null } | null> =>
+    ipcRenderer.invoke('chat:transcript:get', matchId),
+  saveChatTranscript: (matchId: string, turns: ChatTurn[]): Promise<void> =>
+    ipcRenderer.invoke('chat:transcript:save', matchId, turns),
+  saveChatReflection: (matchId: string, reflection: string): Promise<void> =>
+    ipcRenderer.invoke('chat:reflection:save', matchId, reflection),
   getCoachReport: (matchId: string): Promise<CoachReport | null> =>
     ipcRenderer.invoke('report:get', matchId),
   runSessionAnalysis: (): Promise<SessionAnalysis> => ipcRenderer.invoke('analysis:session:run'),

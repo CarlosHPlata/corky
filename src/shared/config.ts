@@ -35,11 +35,27 @@ export interface ContextBlockInfo {
   enabled: boolean
 }
 
+/** A coaching pass's editable prompt-instructions layer, with its resolved text. */
+export interface PromptInfo {
+  id: string
+  /** Human label for UI listing. */
+  label: string
+  description: string
+  /** Effective coaching-instructions text after applying overrides. */
+  instructions: string
+  /** True when the effective text differs from the hardcoded default. */
+  modified: boolean
+  /** True when an override exists but the hardcoded default has since changed
+   * (its stored baseHash no longer matches the current default's hash). */
+  staleDefault: boolean
+}
+
 /** The full coaching configuration after merging defaults with stored overrides. */
 export interface ResolvedCoachingConfig {
   sources: DataSourceInfo[]
   blocks: ContextBlockInfo[]
   budgetTier: BudgetTier
+  prompts: PromptInfo[]
   /** True when any effective value differs from its hardcoded default. */
   modified: boolean
 }
@@ -49,6 +65,9 @@ export interface SaveCoachingConfigInput {
   sources: Record<string, boolean>
   blocks: Record<string, boolean>
   budgetTier: BudgetTier
+  /** Effective instruction text per prompt id; entries matching the default
+   * (or blank) store no override. */
+  prompts: Record<string, string>
 }
 
 /**
@@ -62,4 +81,7 @@ export interface CoachingConfigOverrides {
   sources?: Record<string, boolean>
   blocks?: Record<string, boolean>
   budgetTier?: BudgetTier
+  /** Edited coaching-instructions per prompt id, each carrying the hash of the
+   * default it was written against (stale-default detection after app updates). */
+  prompts?: Record<string, { text: string; baseHash: string }>
 }

@@ -3,10 +3,12 @@ import type {
   CoachingConfigOverrides,
   ContextBlockInfo,
   DataSourceInfo,
+  PromptInfo,
   ResolvedCoachingConfig
 } from '@shared/config'
 import { listContextBlocks } from '../report/contextBlocks'
 import { DATA_SOURCES } from './sourceRegistry'
+import { PROMPT_REGISTRY, hashText } from './promptRegistry'
 
 // Pure. Merges the hardcoded registries (data sources + context blocks) with
 // the stored overrides-only record. Unknown override ids are silently dropped;
@@ -39,12 +41,30 @@ export function resolveConfig(overrides: CoachingConfigOverrides | null): Resolv
       ? overrides.budgetTier
       : DEFAULT_BUDGET_TIER
 
+  // Prompts: an override only takes effect when its text is non-blank and
+  // actually differs from the default; staleDefault flags an override written
+  // against an older hardcoded default (its baseHash no longer matches).
+  const prompts: PromptInfo[] = PROMPT_REGISTRY.map((meta) => {
+    const override = overrides?.prompts?.[meta.id]
+    const text = override?.text.trim()
+    const modified = !!text && text !== meta.defaultInstructions
+    return {
+      id: meta.id,
+      label: meta.label,
+      description: meta.description,
+      instructions: modified ? (text as string) : meta.defaultInstructions,
+      modified,
+      staleDefault: modified && override!.baseHash !== hashText(meta.defaultInstructions)
+    }
+  })
+
   const modified =
     budgetTier !== DEFAULT_BUDGET_TIER ||
     DATA_SOURCES.some((meta, i) => sources[i].enabled !== meta.defaultEnabled) ||
-    blockDefaults.some((meta, i) => blocks[i].enabled !== meta.defaultEnabled)
+    blockDefaults.some((meta, i) => blocks[i].enabled !== meta.defaultEnabled) ||
+    prompts.some((p) => p.modified)
 
-  return { sources, blocks, budgetTier, modified }
+  return { sources, blocks, budgetTier, prompts, modified }
 }
 
 /**
@@ -57,6 +77,7 @@ export function diffOverrides(desired: {
   sources: Record<string, boolean>
   blocks: Record<string, boolean>
   budgetTier: BudgetTier
+  prompts?: Record<string, string>
 }): CoachingConfigOverrides {
   const sources: Record<string, boolean> = {}
   for (const meta of DATA_SOURCES) {
@@ -72,14 +93,24 @@ export function diffOverrides(desired: {
     if (typeof value === 'boolean' && value !== meta.defaultEnabled) blocks[meta.id] = value
   }
 
+  // A blank or default-equal text is "use the default" — no override stored.
+  const prompts: NonNullable<CoachingConfigOverrides['prompts']> = {}
+  for (const meta of PROMPT_REGISTRY) {
+    const text = desired.prompts?.[meta.id]?.trim()
+    if (text && text !== meta.defaultInstructions) {
+      prompts[meta.id] = { text, baseHash: hashText(meta.defaultInstructions) }
+    }
+  }
+
   const overrides: CoachingConfigOverrides = { version: 1 }
   if (Object.keys(sources).length > 0) overrides.sources = sources
   if (Object.keys(blocks).length > 0) overrides.blocks = blocks
   if (desired.budgetTier !== DEFAULT_BUDGET_TIER) overrides.budgetTier = desired.budgetTier
+  if (Object.keys(prompts).length > 0) overrides.prompts = prompts
   return overrides
 }
 
 /** True when the overrides record carries nothing worth storing. */
 export function isEmptyOverrides(overrides: CoachingConfigOverrides): boolean {
-  return !overrides.sources && !overrides.blocks && !overrides.budgetTier
+  return !overrides.sources && !overrides.blocks && !overrides.budgetTier && !overrides.prompts
 }

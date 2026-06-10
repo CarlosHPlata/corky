@@ -6,6 +6,7 @@ import { SqliteReportRepository } from '../adapters/driven/sqlite/SqliteReportRe
 import { SqliteSessionAnalysisRepository } from '../adapters/driven/sqlite/SqliteSessionAnalysisRepository'
 import { SqliteSessionGoalRepository } from '../adapters/driven/sqlite/SqliteSessionGoalRepository'
 import { SqliteSemanticMemory } from '../adapters/driven/sqlite/SqliteSemanticMemory'
+import { SqliteChatTranscriptRepository } from '../adapters/driven/sqlite/SqliteChatTranscriptRepository'
 import { RiotApiClient } from '../adapters/driven/riot/RiotApiClient'
 import { AnthropicCoachingModel } from '../adapters/driven/anthropic/AnthropicCoachingModel'
 import { AnthropicSessionCoachingModel } from '../adapters/driven/anthropic/AnthropicSessionCoachingModel'
@@ -28,9 +29,12 @@ import { GetMatchAnalysis } from '../application/queries/GetMatchAnalysis'
 import { CoachChat } from '../application/commands/CoachChat'
 import { FinalizeReflection } from '../application/commands/FinalizeReflection'
 import { GetStandingTasks } from '../application/queries/GetStandingTasks'
+import { GetChatTranscript } from '../application/queries/GetChatTranscript'
+import { SaveChatTranscript } from '../application/commands/SaveChatTranscript'
 import { GetSessionGoal } from '../application/queries/GetSessionGoal'
 import { SaveSessionGoal } from '../application/commands/SaveSessionGoal'
 import { SqliteCoachingConfigRepository } from '../adapters/driven/sqlite/SqliteCoachingConfigRepository'
+import { resolveConfig } from '../domain/config/coachingConfig'
 import { GetCoachingConfig } from '../application/queries/GetCoachingConfig'
 import { SaveCoachingConfig } from '../application/commands/SaveCoachingConfig'
 import { RestoreCoachingConfigDefaults } from '../application/commands/RestoreCoachingConfigDefaults'
@@ -44,11 +48,18 @@ export function buildContainer() {
   const sessionAnalysisRepo = new SqliteSessionAnalysisRepository(db)
   const sessionGoalRepo = new SqliteSessionGoalRepository(db)
   const semanticMemory = new SqliteSemanticMemory(db)
+  const chatTranscriptRepo = new SqliteChatTranscriptRepository(db)
   const coachingConfigRepo = new SqliteCoachingConfigRepository(db)
   const riotClient = new RiotApiClient(config.riotApiKey)
   const coachingModel = new AnthropicCoachingModel(config.anthropicApiKey)
   const sessionCoachingModel = AnthropicSessionCoachingModel.fromApiKey(config.anthropicApiKey)
-  const matchCoachingModel = AnthropicMatchCoachingModel.fromApiKey(config.anthropicApiKey)
+  // The match coach re-reads the user's edited coaching instructions on every
+  // model invocation (cheap single-row read), so Settings edits apply live.
+  const matchCoachingModel = AnthropicMatchCoachingModel.fromApiKey(config.anthropicApiKey, () =>
+    Object.fromEntries(
+      resolveConfig(coachingConfigRepo.get()).prompts.map((p) => [p.id, p.instructions])
+    )
+  )
   // Single shared OP.GG client (reusable across future features) + this feature's
   // narrow benchmark adapter over it.
   const opggClient = new OpggMcpClient()
@@ -92,6 +103,7 @@ export function buildContainer() {
     matchCoachingModel,
     benchmarkSource,
     sessionGoalRepo,
+    coachingConfigRepo,
     config.anthropicLightModel,
     config.anthropicHeavyModel
   )
@@ -121,6 +133,8 @@ export function buildContainer() {
     config.anthropicLightModel
   )
   const getStandingTasks = new GetStandingTasks(matchRepo, reportRepo)
+  const getChatTranscript = new GetChatTranscript(chatTranscriptRepo)
+  const saveChatTranscript = new SaveChatTranscript(chatTranscriptRepo)
   const getSessionAnalysis = new GetSessionAnalysis(matchRepo, sessionAnalysisRepo)
   const getSessionGoal = new GetSessionGoal(sessionGoalRepo)
   const saveSessionGoal = new SaveSessionGoal(sessionGoalRepo)
@@ -153,6 +167,9 @@ export function buildContainer() {
     coachChat,
     finalizeReflection,
     getStandingTasks,
+    chatTranscriptRepo,
+    getChatTranscript,
+    saveChatTranscript,
     analyzeSession,
     getSessionAnalysis,
     getSessionGoal,

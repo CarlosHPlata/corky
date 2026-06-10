@@ -481,6 +481,17 @@ export interface IpcApi {
   /** The player's current standing focus tasks (global, 1–3). Empty until the
    * first game is analysed. Drives the Home "Next-game focus" card. */
   getStandingTasks: () => Promise<StandingFocusTask[]>
+  /** The stored coaching session for a match — chat turns plus the finalized
+   * reflection (null until written) — or null when nothing was ever saved. */
+  getChatTranscript: (
+    matchId: string
+  ) => Promise<{ turns: ChatTurn[]; reflection: string | null } | null>
+  /** Persist the chat turns for a match's coaching session; any finalized
+   * reflection already stored is preserved. */
+  saveChatTranscript: (matchId: string, turns: ChatTurn[]) => Promise<void>
+  /** Persist the (player-edited or cleaned) reflection text for a match;
+   * stored turns are preserved. Finalize also persists server-side. */
+  saveChatReflection: (matchId: string, reflection: string) => Promise<void>
   getCoachReport: (matchId: string) => Promise<CoachReport | null>
   /** Generate a fresh analysis and persist it as the account's latest. */
   runSessionAnalysis: () => Promise<SessionAnalysis>

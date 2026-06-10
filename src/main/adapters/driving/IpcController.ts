@@ -13,6 +13,9 @@ import type { GetMatchAnalysis } from '../../application/queries/GetMatchAnalysi
 import type { CoachChat } from '../../application/commands/CoachChat'
 import type { FinalizeReflection } from '../../application/commands/FinalizeReflection'
 import type { GetStandingTasks } from '../../application/queries/GetStandingTasks'
+import type { GetChatTranscript } from '../../application/queries/GetChatTranscript'
+import type { SaveChatTranscript } from '../../application/commands/SaveChatTranscript'
+import type { ChatTranscriptRepository } from '../../application/ports/ChatTranscriptRepository'
 import type { AnalyzeMatchOptions, ChatTurn } from '@shared/types'
 import type { GetSessionAnalysis } from '../../application/queries/GetSessionAnalysis'
 import type { AnalyzeSession } from '../../application/commands/AnalyzeSession'
@@ -38,6 +41,11 @@ export function registerIpcHandlers(deps: {
   coachChat: CoachChat
   finalizeReflection: FinalizeReflection
   getStandingTasks: GetStandingTasks
+  getChatTranscript: GetChatTranscript
+  saveChatTranscript: SaveChatTranscript
+  /** Direct repo dep: the finalize handler and the reflection-save channel
+   * persist the written reflection alongside the transcript. */
+  chatTranscriptRepo: ChatTranscriptRepository
   getSessionAnalysis: GetSessionAnalysis
   analyzeSession: AnalyzeSession
   getSessionGoal: GetSessionGoal
@@ -90,12 +98,31 @@ export function registerIpcHandlers(deps: {
     return deps.coachChat.execute(matchId, messages)
   })
 
-  ipcMain.handle('coach:reflection:finalize', (_event, matchId: string, messages: ChatTurn[]) => {
-    return deps.finalizeReflection.execute(matchId, messages)
-  })
+  ipcMain.handle(
+    'coach:reflection:finalize',
+    async (_event, matchId: string, messages: ChatTurn[]) => {
+      const outcome = await deps.finalizeReflection.execute(matchId, messages)
+      // The written reflection is durable coaching data — persist it with the
+      // transcript so the session survives restarts (renderer no longer owns it).
+      if (outcome.reflection) deps.chatTranscriptRepo.saveReflection(matchId, outcome.reflection)
+      return outcome
+    }
+  )
 
   ipcMain.handle('tasks:standing:get', () => {
     return deps.getStandingTasks.execute()
+  })
+
+  ipcMain.handle('chat:transcript:get', (_event, matchId: string) => {
+    return deps.getChatTranscript.execute(matchId)
+  })
+
+  ipcMain.handle('chat:transcript:save', (_event, matchId: string, turns: ChatTurn[]) => {
+    deps.saveChatTranscript.execute(matchId, turns)
+  })
+
+  ipcMain.handle('chat:reflection:save', (_event, matchId: string, reflection: string) => {
+    deps.chatTranscriptRepo.saveReflection(matchId, reflection)
   })
 
   ipcMain.handle('analysis:session:get', () => {

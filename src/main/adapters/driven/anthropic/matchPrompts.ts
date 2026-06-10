@@ -10,12 +10,21 @@ import type { GeneratedTask } from '../../../domain/report/focusTask'
 import type { ProposedSemanticObject } from '../../../domain/memory/semanticObject'
 import { isValidProposedObject } from '../../../domain/memory/semanticObject'
 import { isComputable } from '../../../domain/report/metricRegistry'
+import type { PromptId } from '../../../domain/config/promptRegistry'
+import { getPromptMeta } from '../../../domain/config/promptRegistry'
 
 // Pure prompt builders + validators for the per-match coaching passes. No SDK
 // import here (that lives in AnthropicMatchCoachingModel). Each `parse*` coerces
 // and validates a forced-tool payload and THROWS on anything unusable — mirroring
 // parseSessionAnalysis. Catalog-membership of refs is enforced separately by the
 // orchestrator (anchorCatalog.isValidStructuredRef), so these stay catalog-free.
+//
+// Every system prompt is assembled from two layers (buildSystemPrompt):
+//   1. a LOCKED scaffold (the *_SCAFFOLD constants below) — the output contract:
+//      forced-tool discipline, anchor-citation rules, never-invent-numbers,
+//      length caps. Code-owned, never user-editable.
+//   2. the "coaching instructions" layer — persona/tone/priorities, defaulted in
+//      the prompt registry and overridable per pass from Settings.
 
 const REF_KINDS = new Set(['stat', 'marker', 'benchmark', 'note'])
 const BASES = new Set<string>(['champion_patch', 'rank_general', 'general'])
@@ -32,6 +41,32 @@ function parseRef(raw: unknown): EvidenceRef | null {
   if (!id || !REF_KINDS.has(kind)) return null
   const label = nonEmpty(o.label)
   return { id, kind: kind as EvidenceRef['kind'], ...(label ? { label } : {}) }
+}
+
+// ── System prompt assembly: locked scaffold + coaching instructions ──────────
+
+/** Lazy lookup (the *_SCAFFOLD constants are declared per pass further down). */
+function scaffoldFor(passId: PromptId): string {
+  switch (passId) {
+    case 'framing': return FRAMING_SCAFFOLD
+    case 'narration': return NARRATION_SCAFFOLD
+    case 'review': return REVIEW_SCAFFOLD
+    case 'tasks': return TASKS_SCAFFOLD
+    case 'chat': return CHAT_SCAFFOLD
+    case 'reflection': return REFLECTION_SCAFFOLD
+    case 'discovery': return DISCOVERY_SCAFFOLD
+  }
+}
+
+/**
+ * Assemble a pass's system prompt: the LOCKED scaffold (output contract — tool
+ * discipline, anchor citation, never-invent-numbers, length caps) followed by
+ * the editable coaching-instructions layer. An absent/blank override falls back
+ * to the registry default, so the persona can never go missing.
+ */
+export function buildSystemPrompt(passId: PromptId, instructions?: string): string {
+  const custom = instructions?.trim()
+  return `${scaffoldFor(passId)}\n\n${custom || getPromptMeta(passId).defaultInstructions}`
 }
 
 // ── Pass 3: overall review (prose verdict) ───────────────────────────────────
@@ -85,17 +120,15 @@ export const SUBMIT_REVIEW = {
   }
 }
 
-const REVIEW_SYSTEM = `You are Corky, a blunt high-elo League of Legends coach reviewing ONE of the player's games. Call submit_review with your read.
+const REVIEW_SCAFFOLD = `You are reviewing ONE of the player's League of Legends games. Call submit_review with your read.
 
-Your job: (1) in one or two sentences, name the single most important decision or pattern behind this win or loss — the thing that actually mattered; (2) in "improve", say in one or two sentences the single most important thing to change next game; (3) list the structured claims it rests on, each citing an anchor id from the context.
+Your job: (1) in one or two sentences of prose, name the single most important decision or pattern behind this win or loss — the thing that actually mattered; (2) in "improve", say in one or two sentences the single most important thing to change next game; (3) list the structured claims it rests on, each citing an anchor id from the context.
 
-Hard rules:
+Output contract (locked):
 - Annotate only the facts in the context. NEVER invent a number, a benchmark, or a timeline marker. Every claim's "ref.id" MUST be an id that appears in the context (a STAT or MARK line), unless its kind is "benchmark" or "note".
-- The verdict is prose — blunt, specific, no hedging, no restating the scoreline.
 - When you cite a rate (CS/min, deaths) against the benchmark, set benchmarkBasis to the basis in the BENCH line; if there is no BENCH line use "general".
-- The player's goal/notes (NOTE lines) are their stated intent — speak to them where the data supports it, but never present them as your own evidence and never invent a figure to fit them.
-- If the data can't support a firm conclusion (no timeline, a remake, a very short game), say so plainly and set confidence to "provisional".
-- Be honest about limits. A short, true read beats a confident wrong one.`
+- The player's goal/notes (NOTE lines) are their stated intent — never present them as your own evidence and never invent a figure to fit them.
+- If the data can't support a firm conclusion (no timeline, a remake, a very short game), set confidence to "provisional".`
 
 function renderReviewExtras(extras: ReviewExtras): string {
   const parts: string[] = []
@@ -108,12 +141,16 @@ function renderReviewExtras(extras: ReviewExtras): string {
   return parts.length ? `\n\n${parts.join('\n')}` : ''
 }
 
-export function buildReviewPrompt(ctx: string, extras: ReviewExtras): { system: string; user: string } {
+export function buildReviewPrompt(
+  ctx: string,
+  extras: ReviewExtras,
+  instructions?: string
+): { system: string; user: string } {
   const user = `Game facts (annotate these; cite anchor ids):
 ${ctx}${renderReviewExtras(extras)}
 
 Now call submit_review with the verdict and the claims behind it.`
-  return { system: REVIEW_SYSTEM, user }
+  return { system: buildSystemPrompt('review', instructions), user }
 }
 
 /** Validate + coerce the forced-tool payload into a ReviewOutput. Throws on anything unusable. */
@@ -183,20 +220,20 @@ export const SUBMIT_FRAMING = {
   }
 }
 
-const FRAMING_SYSTEM = `You are Corky, filling the small framing texts on a League of Legends match report. Call submit_framing.
+const FRAMING_SCAFFOLD = `You are filling the small framing texts on a League of Legends match report. Call submit_framing.
 
-These are lightweight decorations drawn ONLY from the game stats — a headline tag, a one-line quick read, the standout player (MVP), and up to three short matchup tips. Keep them factual and tight.
+These are lightweight decorations drawn ONLY from the game stats — a headline tag, a one-line quick read, the standout player (MVP), and up to three short matchup tips.
 
-Hard rules:
+Output contract (locked):
 - Use only the numbers in the context. NEVER invent a figure.
-- The quick read is one sentence, factual, no coaching verdict (the verdict is a separate section).
+- The quick read is ONE sentence and carries no coaching verdict (the verdict is a separate section).
 - MVP is the standout from the scoreboard (either team) with a one-line justification from the numbers; set it to null for a remake / AFK / near-zero-duration game rather than inventing one.
-- Matchup tips are short, factual notes about the lane pairing — no coaching prose.
+- At most three matchup tips, about the lane pairing only.
 - headlineTagIntent: "win"/"loss" for the result, "objective" for a game decided on an objective, else "neutral".`
 
-export function buildFramingPrompt(ctx: string): { system: string; user: string } {
+export function buildFramingPrompt(ctx: string, instructions?: string): { system: string; user: string } {
   return {
-    system: FRAMING_SYSTEM,
+    system: buildSystemPrompt('framing', instructions),
     user: `Game facts:\n${ctx}\n\nNow call submit_framing with the small framing texts.`
   }
 }
@@ -297,19 +334,19 @@ export const SUBMIT_NARRATION = {
   }
 }
 
-const NARRATION_SYSTEM = `You are Corky, narrating the marked moments of a League of Legends game. Call submit_narration.
+const NARRATION_SCAFFOLD = `You are narrating the marked moments of a League of Legends game. Call submit_narration.
 
-For each MARK line in the context, write one short factual line of what happened and why it mattered. Characterise each player death (caught_out / overextended / fair_fight / objective_trade), and use "unclear" rather than guessing when the data can't say. Then pick the handful of moments where the advantage actually swung as turning points.
+For each MARK line in the context, write one short line of what happened. Characterise each player death (caught_out / overextended / fair_fight / objective_trade), then pick the moments where the advantage actually swung as turning points.
 
-Hard rules:
+Output contract (locked):
 - Every "ref.id" MUST be a MARK id from the context (a marker:... id). Do not narrate a moment that isn't marked.
+- Use "unclear" for a death's character rather than guessing when the data can't say.
 - ALWAYS pick the 2–4 biggest turning points — the moments where the advantage actually swung — using the times and sides from the MARK lines (and the gold swing they caused). Do not return an empty turningPoints array when the game had objectives, team-wipes, or death-driven swings.
-- Map positions (you/event/objective, 0–100) are OPTIONAL: include x/y only for player-death moments where the context gives them; otherwise omit the positions entirely. Never invent coordinates.
-- Turning points carry a short "what happened" and a "better play" coaching line; everything else stays factual.`
+- Map positions (you/event/objective, 0–100) are OPTIONAL: include x/y only for player-death moments where the context gives them; otherwise omit the positions entirely. Never invent coordinates.`
 
-export function buildNarrationPrompt(ctx: string): { system: string; user: string } {
+export function buildNarrationPrompt(ctx: string, instructions?: string): { system: string; user: string } {
   return {
-    system: NARRATION_SYSTEM,
+    system: buildSystemPrompt('narration', instructions),
     user: `Game facts (narrate the MARK lines; cite their ids):\n${ctx}\n\nNow call submit_narration.`
   }
 }
@@ -410,18 +447,21 @@ export const SUBMIT_TASKS = {
   }
 }
 
-const TASKS_SYSTEM = `You are Corky, maintaining a player's standing set of focus tasks across games. Call submit_tasks.
+const TASKS_SCAFFOLD = `You are maintaining the player's standing set of focus tasks across games. Call submit_tasks.
 
-Keep a tight set of one to three concrete, measurable tasks. Hold tasks still being worked on, retire ones that are resolved or no longer the biggest leak, and add new focus from this game. Take the player's goal (NOTE line) into account.
+Hold tasks still being worked on, retire ones that are resolved or no longer the biggest leak, and add new focus from this game.
 
-Hard rules:
+Output contract (locked):
 - Every task's "metric" MUST be one of the computable metric keys listed in the context. Do not invent a metric.
 - Tasks are measurable: a metric + comparator + target the engine can check next game.
 - Set "scope" to champion/role/universal; include champion or role when scoped.
-- Never exceed three tasks. Fewer is fine when the data supports fewer honest tasks.
-- Do not fabricate a task the goal or the game data don't support.`
+- Never exceed three tasks.`
 
-export function buildTasksPrompt(ctx: string, extras: TasksExtras): { system: string; user: string } {
+export function buildTasksPrompt(
+  ctx: string,
+  extras: TasksExtras,
+  instructions?: string
+): { system: string; user: string } {
   const standing = extras.standing.length
     ? extras.standing.map((t) => `  - [${t.id}] ${t.description} (${t.metric} ${t.comparator} ${t.target}, ${t.scope})`).join('\n')
     : '  (none yet — this is the first analysed game)'
@@ -439,7 +479,7 @@ This game's result on them:
 ${since}${goal}
 
 Now call submit_tasks with the standing set (1–3) and any ids to retire.`
-  return { system: TASKS_SYSTEM, user }
+  return { system: buildSystemPrompt('tasks', instructions), user }
 }
 
 // Coerce a raw `set`/`retire` payload into a TaskProposal, dropping any task that
@@ -482,15 +522,13 @@ export function parseTasks(input: unknown): TaskProposal {
 // orchestrator supplies as the first user turn. The persona lives here; the facts
 // come in via the briefing so this stays catalog-free and testable.
 
-export const COACH_CHAT_SYSTEM = `You are Corky, a sharp but warm League of Legends coach talking 1:1 with the player right after a ranked game. The first message gives you the facts of THIS game and what the player is working on — coach off those facts, never generalities.
+const CHAT_SCAFFOLD = `You are coaching the player 1:1 over chat about ONE of their ranked League of Legends games. The first message gives you the facts of THIS game and what the player is working on — coach off those facts.
 
-Style:
-- Conversational and concise: 2 to 4 sentences per reply, like a real coach. Never an essay.
-- Ask one focused question at a time and help them reach their own conclusions rather than lecturing.
-- Reference the real facts of this game. Never invent a number, a death, or a moment that isn't in the brief.
+Output contract (locked):
+- Reference only the real facts of this game. Never invent a number, a death, or a moment that isn't in the brief.
 - When the brief includes a DOSSIER section (data fetched for this question), ground your reply in it and cite its facts plainly.
 - Plain text only — no markdown, no headers, no bullet lists, no emoji.
-- Honest about limits. If the data can't settle something, say so.`
+- Keep every reply to at most 4 sentences.`
 
 /** The chat transcript as Anthropic-shaped turns, briefing first. The renderer
  * persists the transcript; this just renders it for the API call. */
@@ -540,13 +578,21 @@ export const SUBMIT_PLAN = {
   }
 }
 
-const DISCOVERY_SYSTEM = `You are the data scout for a League of Legends coach answering ONE player question. Call submit_plan.
+const DISCOVERY_SCAFFOLD = `You are the planning step for a League of Legends coach answering ONE player question. Call submit_plan.
 
-You get the question and an INVENTORY line of what is available: "memory" (durable coaching facts about this player; takes an optional free-text query), "history" (the player's own past games as a comparison cohort), "benchmark" (the public meta reference for this champion/role). Request ONLY what would materially improve the answer — an empty list is a good answer for questions the per-game briefing already covers. Never request a source the inventory shows as empty or off.`
+You get the question and an INVENTORY line of what is available: "memory" (durable coaching facts about this player; takes an optional free-text query), "history" (the player's own past games as a comparison cohort), "benchmark" (the public meta reference for this champion/role).
 
-export function buildDiscoveryPrompt(question: string, inventory: string): { system: string; user: string } {
+Output contract (locked):
+- Request only kinds the inventory lists. Never request a source the inventory shows as empty or off.
+- At most 5 requests; an empty list is a valid answer.`
+
+export function buildDiscoveryPrompt(
+  question: string,
+  inventory: string,
+  instructions?: string
+): { system: string; user: string } {
   return {
-    system: DISCOVERY_SYSTEM,
+    system: buildSystemPrompt('discovery', instructions),
     user: `${inventory}\n\nPlayer question: ${question}\n\nNow call submit_plan with the fetches worth making (empty is fine).`
   }
 }
@@ -636,24 +682,24 @@ const SUBMIT_REFLECTION = {
 
 export { SUBMIT_REFLECTION }
 
-const REFLECTION_SYSTEM = `You are Corky, closing out a coaching session with the player. You have just talked through their game together. Call submit_reflection.
+const REFLECTION_SCAFFOLD = `You are closing out a coaching session — you have just talked through the player's game with them. Call submit_reflection.
 
 Three jobs:
-1. Write the player's reflection in THEIR first-person voice, drawn from what THEY said in the conversation — not your verdict. 2 to 4 short sentences: what they're taking away and the one or two things they'll do differently next game. Plain text only.
+1. "reflection": the player's post-game reflection in THEIR first-person voice, drawn from what THEY said in the conversation — not your verdict. Plain text only, no headers, no quotation marks.
 2. Optionally adjust their focus tasks. The current standing tasks are KEPT automatically — you never need to re-list them. Only use "set" to ADD a brand-new task the conversation clearly surfaced, and "retire" to drop a current task by id. In most sessions you change nothing: return an EMPTY "set" and an EMPTY "retire".
-3. Distill AT MOST 3 durable, longitudinal coaching facts from this session into "memory" — recurring behaviours, confirmed strengths or weaknesses, notable milestones. Phrase each statement so it stands alone without this match's context. When an EXISTING MEMORY entry (the MEMORY lines in the closing message) covers the same subject, restate it refreshed with what this session added rather than inventing a near-duplicate. Most sessions contain nothing durable: return an EMPTY "memory" array then.
+3. Distill AT MOST 3 durable coaching facts from this session into "memory", each phrased to stand alone without this match's context. When an EXISTING MEMORY entry (the MEMORY lines in the closing message) covers the same subject, restate it refreshed with what this session added rather than inventing a near-duplicate. Most sessions contain nothing durable: return an EMPTY "memory" array then.
 
-Hard rules:
+Output contract (locked):
 - The reflection is the PLAYER'S voice and their conclusions — never put words in their mouth or invent a number.
 - Do NOT re-list existing tasks in "set" — that's only for new ones. Leaving "set" empty does NOT remove anything.
 - Every new task's "metric" MUST be one of the computable metric keys listed. Do not invent a metric.
-- Prefer stability: only add or retire a task the conversation actually justifies.
 - Memory is for facts that will still matter games from now — never a one-off match recap, never an invented number.`
 
 export function buildReflectionPrompt(
   briefing: string,
   history: { role: 'user' | 'assistant'; text: string }[],
-  extras: ReflectionExtras
+  extras: ReflectionExtras,
+  instructions?: string
 ): { system: string; messages: { role: 'user' | 'assistant'; content: string }[] } {
   const standing = extras.standing.length
     ? extras.standing
@@ -674,7 +720,7 @@ ${memory}
 
 Call submit_reflection.`
   return {
-    system: REFLECTION_SYSTEM,
+    system: buildSystemPrompt('reflection', instructions),
     messages: buildChatMessages(briefing, history).concat({ role: 'user', content: closing })
   }
 }
