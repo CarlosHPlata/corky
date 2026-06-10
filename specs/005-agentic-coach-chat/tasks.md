@@ -124,7 +124,7 @@
 
 ## Phase 8: Polish & Cross-Cutting
 
-- [ ] T032 Run the full quickstart.md acceptance walk (12 steps) against a real analysed match; fix anything that fails
+- [X] T032 Run the full quickstart.md acceptance walk (12 steps) against a real analysed match; fix anything that fails
 - [X] T033 [P] Update architecture.md — agentic loop (bounded, propose-only), proposals/resolution, reflections store, sessions, revised data-flow diagram and schema section; note the softened "no unbounded tool loops" invariant
 - [X] T034 Cleanup sweep — remove remaining dead code paths referencing `chat_transcripts` outside schema.ts migration + ChatTranscriptRepository (kept as migration source); confirm `npm test` green and lint clean
 
