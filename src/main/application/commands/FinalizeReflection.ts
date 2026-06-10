@@ -2,12 +2,15 @@ import type { ChatTurn, ReflectionOutcome, MatchReport, StandingFocusTask } from
 import type { MatchRepository } from '../ports/MatchRepository'
 import type { ReportRepository } from '../ports/ReportRepository'
 import type { SessionGoalRepository } from '../ports/SessionGoalRepository'
+import type { SemanticMemory } from '../ports/SemanticMemory'
 import type { MatchCoachingModel } from '../ports/MatchCoachingModel'
 import { assembleMatchReport } from '../../domain/report/assembleMatchReport'
 import { buildCoachBriefing } from '../../domain/report/coachBriefing'
 import { mergeStanding, enforceStandingSet } from '../../domain/report/focusTask'
+import { mergeSemanticObjects } from '../../domain/memory/semanticObject'
+import type { SemanticObject } from '../../domain/memory/semanticObject'
 import { METRIC_KEYS } from '../../domain/report/metricRegistry'
-import type { TaskProposal } from '../ports/MatchCoachingModel'
+import type { TaskProposal, ReflectionExtras } from '../ports/MatchCoachingModel'
 
 /**
  * Finalise a coaching session (spec 004): Corky writes the player's reflection
@@ -17,12 +20,17 @@ import type { TaskProposal } from '../ports/MatchCoachingModel'
  * (renderer-local, like the raw note). When the standing set changes, the stored
  * MatchAnalysis is patched and returned so the report's Next-game focus section
  * re-renders without a re-analyse.
+ *
+ * The same model call also distills 0–3 durable coaching facts (semantic memory),
+ * merged ADDITIVELY into the player's memory store — an empty proposal is the
+ * common outcome and never removes anything.
  */
 export class FinalizeReflection {
   constructor(
     private readonly matchRepo: MatchRepository,
     private readonly reportRepo: ReportRepository,
     private readonly goalRepo: SessionGoalRepository,
+    private readonly semanticMemory: SemanticMemory,
     private readonly model: MatchCoachingModel,
     private readonly chatModel: string,
     private readonly now: () => number = () => Date.now()
@@ -36,14 +44,28 @@ export class FinalizeReflection {
     const stored = this.reportRepo.getMatchAnalysis(matchId)
     const goal = this.goalRepo.get()?.goal?.trim() || undefined
     const standing = this.reportRepo.getStandingTasks(account.puuid)
+    // Current semantic memory, queried up front: a compact projection rides the
+    // model call so it refreshes known subjects instead of duplicating them, and
+    // the same rows are the merge baseline afterwards.
+    const existingMemory = this.semanticMemory.query({
+      puuid: account.puuid,
+      statuses: ['active', 'confirmed'],
+      limit: 50
+    })
 
     const briefing = buildCoachBriefing(report, stored, goal)
     const proposal = await this.model.summarizeReflection(
       briefing,
       messages,
-      { standing, catalogMetricKeys: METRIC_KEYS, goal },
+      { standing, catalogMetricKeys: METRIC_KEYS, goal, existingMemory: projectMemory(existingMemory) },
       this.chatModel
     )
+
+    // Distill the session into semantic memory ADDITIVELY: a known subject is
+    // refreshed in place, a new one is minted, and nothing is ever removed by
+    // omission — an empty `memory` proposal is the common "nothing durable" case.
+    const memoryUpserts = mergeSemanticObjects(proposal.memory, existingMemory, matchId, this.now())
+    if (memoryUpserts.length) this.semanticMemory.upsert(account.puuid, memoryUpserts)
 
     // Apply the task adjustment ADDITIVELY. A reflection chat can add a new focus
     // or explicitly retire one, but it must NEVER wipe the standing set by
@@ -111,6 +133,19 @@ export class FinalizeReflection {
     }
     return assembleMatchReport(rawMatch, rawTimeline, puuid)
   }
+}
+
+/** Project stored semantic objects onto the compact shape the model call carries. */
+function projectMemory(objects: SemanticObject[]): ReflectionExtras['existingMemory'] {
+  return objects.map((o) => ({
+    kind: o.kind,
+    ...(o.champion ? { champion: o.champion } : {}),
+    ...(o.role ? { role: o.role } : {}),
+    ...(o.phase ? { phase: o.phase } : {}),
+    ...(o.metric ? { metric: o.metric } : {}),
+    statement: o.statement,
+    occurrences: o.occurrences
+  }))
 }
 
 /** Two tasks share a checkable shape (so they're "the same task" for merge). */

@@ -5,6 +5,7 @@ import { SqliteSummonerRepository } from '../adapters/driven/sqlite/SqliteSummon
 import { SqliteReportRepository } from '../adapters/driven/sqlite/SqliteReportRepository'
 import { SqliteSessionAnalysisRepository } from '../adapters/driven/sqlite/SqliteSessionAnalysisRepository'
 import { SqliteSessionGoalRepository } from '../adapters/driven/sqlite/SqliteSessionGoalRepository'
+import { SqliteSemanticMemory } from '../adapters/driven/sqlite/SqliteSemanticMemory'
 import { RiotApiClient } from '../adapters/driven/riot/RiotApiClient'
 import { AnthropicCoachingModel } from '../adapters/driven/anthropic/AnthropicCoachingModel'
 import { AnthropicSessionCoachingModel } from '../adapters/driven/anthropic/AnthropicSessionCoachingModel'
@@ -28,6 +29,10 @@ import { FinalizeReflection } from '../application/commands/FinalizeReflection'
 import { GetStandingTasks } from '../application/queries/GetStandingTasks'
 import { GetSessionGoal } from '../application/queries/GetSessionGoal'
 import { SaveSessionGoal } from '../application/commands/SaveSessionGoal'
+import { SqliteCoachingConfigRepository } from '../adapters/driven/sqlite/SqliteCoachingConfigRepository'
+import { GetCoachingConfig } from '../application/queries/GetCoachingConfig'
+import { SaveCoachingConfig } from '../application/commands/SaveCoachingConfig'
+import { RestoreCoachingConfigDefaults } from '../application/commands/RestoreCoachingConfigDefaults'
 
 export function buildContainer() {
   const db = getDatabase()
@@ -37,6 +42,8 @@ export function buildContainer() {
   const reportRepo = new SqliteReportRepository(db)
   const sessionAnalysisRepo = new SqliteSessionAnalysisRepository(db)
   const sessionGoalRepo = new SqliteSessionGoalRepository(db)
+  const semanticMemory = new SqliteSemanticMemory(db)
+  const coachingConfigRepo = new SqliteCoachingConfigRepository(db)
   const riotClient = new RiotApiClient(config.riotApiKey)
   const coachingModel = new AnthropicCoachingModel(config.anthropicApiKey)
   const sessionCoachingModel = AnthropicSessionCoachingModel.fromApiKey(config.anthropicApiKey)
@@ -103,6 +110,7 @@ export function buildContainer() {
     matchRepo,
     reportRepo,
     sessionGoalRepo,
+    semanticMemory,
     matchCoachingModel,
     config.anthropicLightModel
   )
@@ -110,6 +118,9 @@ export function buildContainer() {
   const getSessionAnalysis = new GetSessionAnalysis(matchRepo, sessionAnalysisRepo)
   const getSessionGoal = new GetSessionGoal(sessionGoalRepo)
   const saveSessionGoal = new SaveSessionGoal(sessionGoalRepo)
+  const getCoachingConfig = new GetCoachingConfig(coachingConfigRepo)
+  const saveCoachingConfig = new SaveCoachingConfig(coachingConfigRepo)
+  const restoreCoachingConfigDefaults = new RestoreCoachingConfigDefaults(coachingConfigRepo)
 
   return {
     matchRepo,
@@ -117,6 +128,7 @@ export function buildContainer() {
     reportRepo,
     sessionAnalysisRepo,
     sessionGoalRepo,
+    semanticMemory,
     coachingModel,
     sessionCoachingModel,
     opggClient,
@@ -137,6 +149,10 @@ export function buildContainer() {
     analyzeSession,
     getSessionAnalysis,
     getSessionGoal,
-    saveSessionGoal
+    saveSessionGoal,
+    coachingConfigRepo,
+    getCoachingConfig,
+    saveCoachingConfig,
+    restoreCoachingConfigDefaults
   }
 }

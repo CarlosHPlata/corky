@@ -178,5 +178,14 @@ export function runMigrations(db: Database.Database): void {
         VALUES ('delete', old.rowid, old.statement);
       INSERT INTO semantic_objects_fts (rowid, statement) VALUES (new.rowid, new.statement);
     END;
+
+    -- Coaching configuration overrides. Single global row (single-user app)
+    -- holding ONLY deviations from the hardcoded defaults as JSON; no row (or
+    -- corrupt JSON) means pure defaults, and "Restore defaults" deletes it.
+    CREATE TABLE IF NOT EXISTS coaching_config (
+      id         INTEGER PRIMARY KEY CHECK (id = 1),
+      json       TEXT NOT NULL,
+      updated_at INTEGER
+    );
   `)
 }

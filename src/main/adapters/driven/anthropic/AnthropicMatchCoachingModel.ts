@@ -112,7 +112,8 @@ export class AnthropicMatchCoachingModel implements MatchCoachingModel {
     const { system, messages } = buildReflectionPrompt(briefing, history, extras)
     const message = await this.createMessage({
       model,
-      max_tokens: 900,
+      // Headroom for the third job (0–3 memory facts) on top of reflection+tasks.
+      max_tokens: 1200,
       system,
       messages,
       tools: [SUBMIT_REFLECTION],

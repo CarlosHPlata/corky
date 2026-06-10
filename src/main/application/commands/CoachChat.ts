@@ -5,6 +5,7 @@ import type { SessionGoalRepository } from '../ports/SessionGoalRepository'
 import type { MatchCoachingModel } from '../ports/MatchCoachingModel'
 import { assembleMatchReport } from '../../domain/report/assembleMatchReport'
 import { buildCoachBriefing } from '../../domain/report/coachBriefing'
+import { makeRefLineRenderer } from '../../domain/report/resolveChatRefs'
 
 /**
  * Post-game coaching chat (spec 004). Rebuilds the per-game briefing in the main
@@ -27,8 +28,24 @@ export class CoachChat {
     const analysis = this.reportRepo.getMatchAnalysis(matchId)
     const goal = this.goalRepo.get()?.goal?.trim() || undefined
     const briefing = buildCoachBriefing(report, analysis, goal)
-    const reply = await this.model.chat(briefing, messages, this.chatModel)
+    const reply = await this.model.chat(briefing, this.groundRefs(report, messages), this.chatModel)
     return { reply }
+  }
+
+  /**
+   * Ground evidence-referenced turns: each message carrying refs gets its REF
+   * lines prepended to the text, so the model sees the fact behind the thing the
+   * player pointed at. The anchor catalog is built lazily, once, on the first ref
+   * encountered; turns without refs pass through untouched.
+   */
+  private groundRefs(report: MatchReport, messages: ChatTurn[]): ChatTurn[] {
+    const render = makeRefLineRenderer(report)
+    return messages.map((m) => {
+      if (!m.refs?.length) return m
+      const lines = render(m.refs)
+      if (!lines.length) return m
+      return { ...m, text: `${lines.join('\n')}\n\n${m.text}` }
+    })
   }
 
   private loadReport(matchId: string): MatchReport {

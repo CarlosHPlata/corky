@@ -5,6 +5,7 @@ import type {
   SessionGoal, SessionGoalInput, MatchAnalysis, AnalyzeMatchOptions,
   ChatTurn, CoachChatReply, ReflectionOutcome, StandingFocusTask
 } from '../shared/types'
+import type { ResolvedCoachingConfig, SaveCoachingConfigInput } from '../shared/config'
 
 const api: IpcApi = {
   syncMatches: (count: number, start?: number) => ipcRenderer.invoke('matches:sync', count, start),
@@ -31,7 +32,12 @@ const api: IpcApi = {
   getSessionAnalysis: (): Promise<SessionAnalysis | null> => ipcRenderer.invoke('analysis:session:get'),
   getSessionGoal: (): Promise<SessionGoal | null> => ipcRenderer.invoke('goal:get'),
   saveSessionGoal: (input: SessionGoalInput): Promise<SessionGoal> =>
-    ipcRenderer.invoke('goal:save', input)
+    ipcRenderer.invoke('goal:save', input),
+  getCoachingConfig: (): Promise<ResolvedCoachingConfig> => ipcRenderer.invoke('config:coaching:get'),
+  saveCoachingConfig: (input: SaveCoachingConfigInput): Promise<ResolvedCoachingConfig> =>
+    ipcRenderer.invoke('config:coaching:save', input),
+  restoreCoachingConfigDefaults: (): Promise<ResolvedCoachingConfig> =>
+    ipcRenderer.invoke('config:coaching:restore')
 }
 
 contextBridge.exposeInMainWorld('api', api)

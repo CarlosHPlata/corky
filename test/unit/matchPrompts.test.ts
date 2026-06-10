@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
-import { parseReview, parseFraming, parseNarration, parseTasks, parseReflection } from '../../src/main/adapters/driven/anthropic/matchPrompts'
+import {
+  parseReview, parseFraming, parseNarration, parseTasks, parseReflection,
+  buildReflectionPrompt, SUBMIT_REFLECTION
+} from '../../src/main/adapters/driven/anthropic/matchPrompts'
 import {
   AnthropicMatchCoachingModel,
   type CreateMessage
@@ -167,6 +170,74 @@ describe('parseReflection', () => {
 
   it('throws when the reflection text is empty', () => {
     expect(() => parseReflection({ reflection: '   ', set: [], retire: [] })).toThrow()
+  })
+
+  it('requires the memory array in the tool schema (empty = nothing durable)', () => {
+    expect(SUBMIT_REFLECTION.input_schema.required).toContain('memory')
+    const memorySchema = SUBMIT_REFLECTION.input_schema.properties.memory as { items: { properties: { kind: { enum: string[] } } } }
+    expect(memorySchema.items.properties.kind.enum).toEqual(
+      ['observation', 'pattern', 'strength', 'weakness', 'reflection', 'milestone']
+    )
+  })
+
+  it('parses valid memory entries and keeps only the well-formed fields', () => {
+    const out = parseReflection({
+      reflection: 'ok',
+      set: [],
+      retire: [],
+      memory: [
+        { kind: 'pattern', phase: 'mid', statement: 'Dies solo in river between 14 and 20 minutes.' },
+        { kind: 'strength', champion: 'Ahri', phase: 'nonsense', statement: 'Strong roam timings on Ahri.' }
+      ]
+    })
+    expect(out.memory).toHaveLength(2)
+    expect(out.memory[0]).toEqual({ kind: 'pattern', phase: 'mid', statement: 'Dies solo in river between 14 and 20 minutes.' })
+    expect(out.memory[1]).toEqual({ kind: 'strength', champion: 'Ahri', statement: 'Strong roam timings on Ahri.' }) // bad phase dropped, entry kept
+  })
+
+  it('drops invalid memory entries and tolerates the field missing entirely', () => {
+    const out = parseReflection({
+      reflection: 'ok',
+      set: [],
+      retire: [],
+      memory: [
+        { kind: 'vibes', statement: 'Not a real kind.' },
+        { kind: 'pattern', statement: '   ' },
+        { kind: 'pattern', statement: 'x'.repeat(241) }, // over the 240-char cap
+        'not an object'
+      ]
+    })
+    expect(out.memory).toEqual([])
+    // Field missing entirely → empty array, not a throw.
+    expect(parseReflection({ reflection: 'ok', set: [], retire: [] }).memory).toEqual([])
+  })
+
+  it('caps the memory proposals at three', () => {
+    const entry = { kind: 'observation', statement: 'A durable fact.' }
+    const out = parseReflection({ reflection: 'ok', set: [], retire: [], memory: Array(5).fill(entry) })
+    expect(out.memory).toHaveLength(3)
+  })
+})
+
+describe('buildReflectionPrompt', () => {
+  const baseExtras = { standing: [], catalogMetricKeys: ['deaths' as const], existingMemory: [] }
+
+  it('renders existing memory as compact MEMORY lines in the closing message', () => {
+    const { messages } = buildReflectionPrompt('BRIEFING', [], {
+      ...baseExtras,
+      existingMemory: [
+        { kind: 'pattern', champion: 'ahri', occurrences: 3, statement: 'Dies solo in river 14-20min.' },
+        { kind: 'strength', role: 'Mid', phase: 'close', metric: 'deaths', occurrences: 1, statement: 'Closes clean.' }
+      ]
+    })
+    const closing = messages.at(-1)?.content ?? ''
+    expect(closing).toContain('MEMORY kind=pattern champ=ahri x3 "Dies solo in river 14-20min."')
+    expect(closing).toContain('MEMORY kind=strength role=Mid phase=close metric=deaths x1 "Closes clean."')
+  })
+
+  it('renders a MEMORY none line when the store is empty', () => {
+    const { messages } = buildReflectionPrompt('BRIEFING', [], baseExtras)
+    expect(messages.at(-1)?.content).toContain('MEMORY none')
   })
 })
 

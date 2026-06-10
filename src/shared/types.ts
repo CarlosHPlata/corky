@@ -435,6 +435,9 @@ export interface AnalyzeMatchOptions {
 export interface ChatTurn {
   role: 'user' | 'assistant'
   text: string
+  /** Evidence anchors the player attached to this message from the report
+   * (timeline markers, deaths, stats); grounded to facts in the main process. */
+  refs?: EvidenceRef[]
 }
 
 /** Corky's reply to a single chat turn. */
@@ -487,4 +490,12 @@ export interface IpcApi {
   getSessionGoal: () => Promise<SessionGoal | null>
   /** Persist the goal + notes (server trims + caps); returns the stored record. */
   saveSessionGoal: (input: SessionGoalInput) => Promise<SessionGoal>
+  /** The effective coaching config: registry metadata merged with stored overrides. */
+  getCoachingConfig: () => Promise<import('./config').ResolvedCoachingConfig>
+  /** Persist the desired source/block/tier state (stored as a diff from defaults). */
+  saveCoachingConfig: (
+    input: import('./config').SaveCoachingConfigInput
+  ) => Promise<import('./config').ResolvedCoachingConfig>
+  /** Drop every override — sources, blocks and tier back to install defaults. */
+  restoreCoachingConfigDefaults: () => Promise<import('./config').ResolvedCoachingConfig>
 }

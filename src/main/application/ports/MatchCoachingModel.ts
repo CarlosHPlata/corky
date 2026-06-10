@@ -3,6 +3,7 @@ import type {
   StandingFocusTask, FocusTaskEval, BenchmarkBasis, MetricKey, ChatTurn
 } from '@shared/types'
 import type { GeneratedTask } from '../../domain/report/focusTask'
+import type { ProposedSemanticObject } from '../../domain/memory/semanticObject'
 
 /** Benchmark reference passed to the review pass (tagged with its basis). */
 export interface BenchmarkRef {
@@ -44,18 +45,32 @@ export interface TaskProposal {
 
 /** Extra context for finalising a coaching session into a reflection (spec 004).
  * Corky may adjust the standing focus tasks off the back of the conversation, so
- * it needs the current set + the computable metric keys (same rule as pass 4). */
+ * it needs the current set + the computable metric keys (same rule as pass 4).
+ * `existingMemory` is a compact projection of the player's current semantic
+ * memory, so the model refreshes a known subject instead of duplicating it. */
 export interface ReflectionExtras {
   standing: StandingFocusTask[]
   catalogMetricKeys: MetricKey[]
   goal?: string
+  existingMemory: {
+    kind: string
+    champion?: string
+    role?: string
+    phase?: string
+    metric?: string
+    statement: string
+    occurrences: number
+  }[]
 }
 
-/** The model's output when finalising a session: the written reflection plus an
- * optional adjustment to the standing focus tasks (same shape as a TaskProposal). */
+/** The model's output when finalising a session: the written reflection, an
+ * optional adjustment to the standing focus tasks (same shape as a TaskProposal),
+ * plus 0–3 durable coaching facts distilled from the session. An empty `memory`
+ * is the common case — most sessions surface nothing worth remembering. */
 export interface ReflectionProposal {
   reflection: string
   tasks: TaskProposal
+  memory: ProposedSemanticObject[]
 }
 
 /**

@@ -19,6 +19,10 @@ import type { AnalyzeSession } from '../../application/commands/AnalyzeSession'
 import type { GetSessionGoal } from '../../application/queries/GetSessionGoal'
 import type { SaveSessionGoal } from '../../application/commands/SaveSessionGoal'
 import type { SessionGoalInput } from '@shared/types'
+import type { GetCoachingConfig } from '../../application/queries/GetCoachingConfig'
+import type { SaveCoachingConfig } from '../../application/commands/SaveCoachingConfig'
+import type { RestoreCoachingConfigDefaults } from '../../application/commands/RestoreCoachingConfigDefaults'
+import type { SaveCoachingConfigInput } from '@shared/config'
 
 export function registerIpcHandlers(deps: {
   syncRecentMatches: SyncRecentMatches
@@ -38,6 +42,9 @@ export function registerIpcHandlers(deps: {
   analyzeSession: AnalyzeSession
   getSessionGoal: GetSessionGoal
   saveSessionGoal: SaveSessionGoal
+  getCoachingConfig: GetCoachingConfig
+  saveCoachingConfig: SaveCoachingConfig
+  restoreCoachingConfigDefaults: RestoreCoachingConfigDefaults
 }): void {
   ipcMain.handle('matches:sync', async (_event, count: number, start?: number) => {
     await deps.syncRecentMatches.execute(count, start)
@@ -105,5 +112,17 @@ export function registerIpcHandlers(deps: {
 
   ipcMain.handle('goal:save', (_event, input: SessionGoalInput) => {
     return deps.saveSessionGoal.execute(input)
+  })
+
+  ipcMain.handle('config:coaching:get', () => {
+    return deps.getCoachingConfig.execute()
+  })
+
+  ipcMain.handle('config:coaching:save', (_event, input: SaveCoachingConfigInput) => {
+    return deps.saveCoachingConfig.execute(input)
+  })
+
+  ipcMain.handle('config:coaching:restore', () => {
+    return deps.restoreCoachingConfigDefaults.execute()
   })
 }

@@ -6,6 +6,8 @@ import type {
   ReviewExtras, TasksExtras, TaskProposal, ReflectionExtras, ReflectionProposal
 } from '../../../application/ports/MatchCoachingModel'
 import type { GeneratedTask } from '../../../domain/report/focusTask'
+import type { ProposedSemanticObject } from '../../../domain/memory/semanticObject'
+import { isValidProposedObject } from '../../../domain/memory/semanticObject'
 import { isComputable } from '../../../domain/report/metricRegistry'
 
 // Pure prompt builders + validators for the per-match coaching passes. No SDK
@@ -500,14 +502,17 @@ export function buildChatMessages(
   ]
 }
 
+const MEMORY_KINDS = ['observation', 'pattern', 'strength', 'weakness', 'reflection', 'milestone']
+const MEMORY_PHASES = new Set(['lane', 'mid', 'close'])
+
 const SUBMIT_REFLECTION = {
   name: 'submit_reflection',
   description:
-    "Write the player's post-game reflection from the conversation, and optionally adjust their standing focus tasks if the talk warrants it.",
+    "Write the player's post-game reflection from the conversation, optionally adjust their standing focus tasks if the talk warrants it, and distill at most 3 durable coaching facts worth remembering across games.",
   input_schema: {
     type: 'object' as const,
     additionalProperties: false,
-    required: ['reflection', 'set', 'retire'],
+    required: ['reflection', 'set', 'retire', 'memory'],
     properties: {
       reflection: {
         type: 'string',
@@ -534,7 +539,26 @@ const SUBMIT_REFLECTION = {
           }
         }
       },
-      retire: { type: 'array', items: { type: 'string' }, description: 'Ids of standing tasks to retire.' }
+      retire: { type: 'array', items: { type: 'string' }, description: 'Ids of standing tasks to retire.' },
+      memory: {
+        type: 'array',
+        maxItems: 3,
+        description:
+          'At most 3 durable, longitudinal coaching facts distilled from this session — facts worth remembering ACROSS games, not match recap. Return an EMPTY array when the session surfaced nothing durable (the common case).',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['kind', 'statement'],
+          properties: {
+            kind: { type: 'string', enum: MEMORY_KINDS },
+            champion: { type: 'string', description: 'Champion the fact is about, when champion-specific.' },
+            role: { type: 'string', description: 'Role the fact is about, when role-specific.' },
+            phase: { type: 'string', enum: ['lane', 'mid', 'close'] },
+            metric: { type: 'string', description: 'Metric key the fact hinges on, when metric-specific.' },
+            statement: { type: 'string', description: 'The durable coaching fact, phrased to stand alone without this match. At most 240 characters.' }
+          }
+        }
+      }
     }
   }
 }
@@ -543,15 +567,17 @@ export { SUBMIT_REFLECTION }
 
 const REFLECTION_SYSTEM = `You are Corky, closing out a coaching session with the player. You have just talked through their game together. Call submit_reflection.
 
-Two jobs:
+Three jobs:
 1. Write the player's reflection in THEIR first-person voice, drawn from what THEY said in the conversation — not your verdict. 2 to 4 short sentences: what they're taking away and the one or two things they'll do differently next game. Plain text only.
 2. Optionally adjust their focus tasks. The current standing tasks are KEPT automatically — you never need to re-list them. Only use "set" to ADD a brand-new task the conversation clearly surfaced, and "retire" to drop a current task by id. In most sessions you change nothing: return an EMPTY "set" and an EMPTY "retire".
+3. Distill AT MOST 3 durable, longitudinal coaching facts from this session into "memory" — recurring behaviours, confirmed strengths or weaknesses, notable milestones. Phrase each statement so it stands alone without this match's context. When an EXISTING MEMORY entry (the MEMORY lines in the closing message) covers the same subject, restate it refreshed with what this session added rather than inventing a near-duplicate. Most sessions contain nothing durable: return an EMPTY "memory" array then.
 
 Hard rules:
 - The reflection is the PLAYER'S voice and their conclusions — never put words in their mouth or invent a number.
 - Do NOT re-list existing tasks in "set" — that's only for new ones. Leaving "set" empty does NOT remove anything.
 - Every new task's "metric" MUST be one of the computable metric keys listed. Do not invent a metric.
-- Prefer stability: only add or retire a task the conversation actually justifies.`
+- Prefer stability: only add or retire a task the conversation actually justifies.
+- Memory is for facts that will still matter games from now — never a one-off match recap, never an invented number.`
 
 export function buildReflectionPrompt(
   briefing: string,
@@ -564,11 +590,16 @@ export function buildReflectionPrompt(
         .join('\n')
     : '  (none yet)'
   const goal = extras.goal ? `\nThe player is working on: ${extras.goal}` : ''
-  const closing = `We're done talking. Now write my reflection from what I said, and keep my focus tasks current.
+  const memory = extras.existingMemory.length
+    ? extras.existingMemory.map(renderMemoryLine).join('\n')
+    : 'MEMORY none'
+  const closing = `We're done talking. Now write my reflection from what I said, keep my focus tasks current, and update what you remember about me.
 
 Computable metric keys: ${extras.catalogMetricKeys.join(', ')}
 Current standing focus tasks:
 ${standing}${goal}
+What you already remember about this player:
+${memory}
 
 Call submit_reflection.`
   return {
@@ -577,10 +608,50 @@ Call submit_reflection.`
   }
 }
 
+/** Render one existing-memory entry as a compact MEMORY line for the closing
+ * message, e.g. `MEMORY kind=pattern champ=ahri x3 "dies solo in river 14-20min"`. */
+function renderMemoryLine(m: ReflectionExtras['existingMemory'][number]): string {
+  const tags = [
+    `kind=${m.kind}`,
+    ...(m.champion ? [`champ=${m.champion}`] : []),
+    ...(m.role ? [`role=${m.role}`] : []),
+    ...(m.phase ? [`phase=${m.phase}`] : []),
+    ...(m.metric ? [`metric=${m.metric}`] : [])
+  ]
+  return `MEMORY ${tags.join(' ')} x${m.occurrences} "${m.statement}"`
+}
+
+// Coerce the raw `memory` payload into proposed semantic objects, dropping any
+// entry that isn't well-formed (isValidProposedObject) and tolerating the field
+// missing entirely — an absent/empty array is the common "nothing durable" case.
+function parseMemory(o: Record<string, unknown>): ProposedSemanticObject[] {
+  const memory: ProposedSemanticObject[] = []
+  for (const raw of Array.isArray(o.memory) ? o.memory : []) {
+    if (!raw || typeof raw !== 'object') continue
+    const r = raw as Record<string, unknown>
+    const statement = nonEmpty(r.statement)
+    if (!statement) continue
+    const champion = nonEmpty(r.champion)
+    const role = nonEmpty(r.role)
+    const phase = typeof r.phase === 'string' && MEMORY_PHASES.has(r.phase) ? r.phase : null
+    const metric = nonEmpty(r.metric)
+    const candidate: ProposedSemanticObject = {
+      kind: (typeof r.kind === 'string' ? r.kind : '') as ProposedSemanticObject['kind'],
+      statement,
+      ...(champion ? { champion } : {}),
+      ...(role ? { role } : {}),
+      ...(phase ? { phase: phase as ProposedSemanticObject['phase'] } : {}),
+      ...(metric ? { metric } : {})
+    }
+    if (isValidProposedObject(candidate)) memory.push(candidate)
+  }
+  return memory.slice(0, 3)
+}
+
 export function parseReflection(input: unknown): ReflectionProposal {
   if (!input || typeof input !== 'object') throw new Error('Reflection model returned no payload')
   const o = input as Record<string, unknown>
   const reflection = nonEmpty(o.reflection)
   if (!reflection) throw new Error('Reflection model returned no reflection text')
-  return { reflection, tasks: parseTaskProposal(o) }
+  return { reflection, tasks: parseTaskProposal(o), memory: parseMemory(o) }
 }
