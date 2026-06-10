@@ -11,7 +11,7 @@ import type { GetCoachReport } from '../../application/queries/GetCoachReport'
 import type { AnalyzeMatch } from '../../application/commands/AnalyzeMatch'
 import type { GetMatchAnalysis } from '../../application/queries/GetMatchAnalysis'
 import type { CoachChat } from '../../application/commands/CoachChat'
-import type { FinalizeReflection } from '../../application/commands/FinalizeReflection'
+import type { SummarizeIntoReflection } from '../../application/commands/SummarizeIntoReflection'
 import type { GetStandingTasks } from '../../application/queries/GetStandingTasks'
 import type { GetProgress } from '../../application/queries/GetProgress'
 import type { GetChatSessions } from '../../application/queries/GetChatSessions'
@@ -21,7 +21,6 @@ import type { SaveReflection } from '../../application/commands/SaveReflection'
 import type { DeleteReflection } from '../../application/commands/DeleteReflection'
 import type { ListReflections } from '../../application/queries/ListReflections'
 import type { ResolveProposalInput, SaveReflectionInput } from '@shared/types'
-import type { ReflectionRepository } from '../../application/ports/ReflectionRepository'
 import type { AnalyzeMatchOptions, ChatTurn } from '@shared/types'
 import type { GetSessionAnalysis } from '../../application/queries/GetSessionAnalysis'
 import type { AnalyzeSession } from '../../application/commands/AnalyzeSession'
@@ -45,7 +44,7 @@ export function registerIpcHandlers(deps: {
   analyzeMatch: AnalyzeMatch
   getMatchAnalysis: GetMatchAnalysis
   coachChat: CoachChat
-  finalizeReflection: FinalizeReflection
+  summarizeIntoReflection: SummarizeIntoReflection
   getStandingTasks: GetStandingTasks
   getProgress: GetProgress
   getChatSessions: GetChatSessions
@@ -54,10 +53,6 @@ export function registerIpcHandlers(deps: {
   saveReflection: SaveReflection
   deleteReflection: DeleteReflection
   listReflections: ListReflections
-  /** Direct repo dep: the finalize handler stores Corky's written reflection
-   * as a coach-authored row in the reflections store (until US5 replaces the
-   * finalize flow with a summarize proposal). */
-  reflectionRepo: ReflectionRepository
   getSessionAnalysis: GetSessionAnalysis
   analyzeSession: AnalyzeSession
   getSessionGoal: GetSessionGoal
@@ -127,24 +122,9 @@ export function registerIpcHandlers(deps: {
   })
 
   ipcMain.handle(
-    'coach:reflection:finalize',
-    async (_event, matchId: string, messages: ChatTurn[]) => {
-      const outcome = await deps.finalizeReflection.execute(matchId, messages)
-      // The written reflection is durable coaching data — it lands in the
-      // reflections store (spec 005) so the Reflections panel shows it.
-      if (outcome.reflection) {
-        const at = Date.now()
-        deps.reflectionRepo.upsert({
-          id: `${matchId}-refl-${at.toString(36)}-1`,
-          matchId,
-          text: outcome.reflection,
-          refs: [],
-          source: 'coach',
-          createdAt: at,
-          updatedAt: at
-        })
-      }
-      return outcome
+    'coach:summarize',
+    (_event, matchId: string, sessionId: string, messages: ChatTurn[]) => {
+      return deps.summarizeIntoReflection.execute(matchId, sessionId, messages)
     }
   )
 

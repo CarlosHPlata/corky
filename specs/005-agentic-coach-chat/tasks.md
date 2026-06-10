@@ -101,8 +101,8 @@
 
 **Independent Test**: Click a task row → chip in composer → send → reply cites the exact rule (quickstart step 9).
 
-- [ ] T027 [P] [US4] Wrap standing-task rows in `Askable` emitting `{ id: 'task:<taskId>', kind: 'task', label: description }` — add optional `onAsk`/`taskId` props to src/renderer/src/components/coaching/FocusTask.tsx, pass the report's `addRef` from src/renderer/src/screens/CoachReport.tsx (pendingRefs pool already exists)
-- [ ] T028 [US4] Add `task:` lookup source to src/main/domain/report/resolveChatRefs.ts — render `[TASK <id> "desc" rule=<metric><comparator><target> scope=<scope> status=<status>]` from the standing set (active + retired), unknown ids silently dropped; CoachChat passes the standing set into the renderer factory; extend test/unit (or add) resolveChatRefs coverage for task refs + retired + unknown
+- [X] T027 [P] [US4] Wrap standing-task rows in `Askable` emitting `{ id: 'task:<taskId>', kind: 'task', label: description }` — add optional `onAsk`/`taskId` props to src/renderer/src/components/coaching/FocusTask.tsx, pass the report's `addRef` from src/renderer/src/screens/CoachReport.tsx (pendingRefs pool already exists)
+- [X] T028 [US4] Add `task:` lookup source to src/main/domain/report/resolveChatRefs.ts — render `[TASK <id> "desc" rule=<metric><comparator><target> scope=<scope> status=<status>]` from the standing set (active + retired), unknown ids silently dropped; CoachChat passes the standing set into the renderer factory; extend test/unit (or add) resolveChatRefs coverage for task refs + retired + unknown
 
 **Checkpoint**: Touchable-report pattern complete across stats, markers, benchmarks, and tasks.
 

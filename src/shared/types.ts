@@ -576,18 +576,6 @@ export interface ResolveProposalOutcome {
   reflection: Reflection | null
 }
 
-/** Result of finalising a coaching session: the written reflection plus any
- * adjustment Corky made to the standing focus tasks off the back of the talk. */
-export interface ReflectionOutcome {
-  /** The reflection Corky wrote in the player's first-person voice. */
-  reflection: string
-  /** The refreshed analysis when the standing focus tasks changed; null otherwise.
-   * Lets the report re-render its Next-game focus section without a re-analyse. */
-  analysis: MatchAnalysis | null
-  /** True when finalising changed the standing focus-task set. */
-  tasksUpdated: boolean
-}
-
 export interface IpcApi {
   /** `start` fetches an older Riot window (match-v5 offset) for infinite scroll. */
   syncMatches: (count: number, start?: number) => Promise<void>
@@ -617,9 +605,9 @@ export interface IpcApi {
   saveReflection: (input: SaveReflectionInput) => Promise<Reflection>
   /** Hard-delete one reflection; deleting a missing id is a no-op (spec 005). */
   deleteReflection: (matchId: string, reflectionId: string) => Promise<void>
-  /** Finalise the coaching session: Corky writes the reflection and may adjust the
-   * standing focus tasks. Persists task changes; returns the written reflection. */
-  finalizeReflection: (matchId: string, messages: ChatTurn[]) => Promise<ReflectionOutcome>
+  /** Summarize the session into a reflection: a standard create_reflection
+   * proposal turn comes back — nothing persists until accepted (spec 005). */
+  summarizeIntoReflection: (matchId: string, sessionId: string, messages: ChatTurn[]) => Promise<CoachChatReply>
   /** The player's current standing focus tasks (global, 1–3). Empty until the
    * first game is analysed. Drives the Home "Next-game focus" card. */
   getStandingTasks: () => Promise<StandingFocusTask[]>

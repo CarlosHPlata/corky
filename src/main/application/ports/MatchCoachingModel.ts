@@ -44,34 +44,17 @@ export interface TaskProposal {
   retire: string[]
 }
 
-/** Extra context for finalising a coaching session into a reflection (spec 004).
- * Corky may adjust the standing focus tasks off the back of the conversation, so
- * it needs the current set + the computable metric keys (same rule as pass 4).
- * `existingMemory` is a compact projection of the player's current semantic
- * memory, so the model refreshes a known subject instead of duplicating it. */
-export interface ReflectionExtras {
-  standing: StandingFocusTask[]
-  catalogMetricKeys: MetricKey[]
-  goal?: string
-  existingMemory: {
-    kind: string
-    champion?: string
-    role?: string
-    phase?: string
-    metric?: string
-    statement: string
-    occurrences: number
-  }[]
-}
-
-/** The model's output when finalising a session: the written reflection, an
- * optional adjustment to the standing focus tasks (same shape as a TaskProposal),
- * plus 0–3 durable coaching facts distilled from the session. An empty `memory`
- * is the common case — most sessions surface nothing worth remembering. */
-export interface ReflectionProposal {
-  reflection: string
-  tasks: TaskProposal
-  memory: ProposedSemanticObject[]
+/** Compact projection of the player's current semantic memory, carried into
+ * the distillation call so the model refreshes a known subject instead of
+ * duplicating it (spec 005). */
+export interface ExistingMemoryEntry {
+  kind: string
+  champion?: string
+  role?: string
+  phase?: string
+  metric?: string
+  statement: string
+  occurrences: number
 }
 
 /** Extra context for the agentic chat call (spec 005): what the model may
@@ -146,14 +129,24 @@ export interface MatchCoachingModel {
    */
   planDiscovery(question: string, inventory: string, model: string): Promise<DiscoveryPlan>
   /**
-   * Finalise a session: write the player's reflection from the conversation and,
-   * if the talk warrants it, adjust the standing focus tasks (computable metrics
-   * only). Returns both; the orchestrator persists the task change.
+   * Summarize a session into a reflection (spec 005): one forced-tool call
+   * returning the takeaway text (player's voice) + optional evidence ref ids.
+   * The orchestrator wraps it as a standard create_reflection proposal.
    */
-  summarizeReflection(
+  summarizeReflectionText(
     briefing: string,
     history: ChatTurn[],
-    extras: ReflectionExtras,
     model: string
-  ): Promise<ReflectionProposal>
+  ): Promise<{ text: string; refIds: string[] }>
+  /**
+   * Distill 0–3 durable coaching facts from a closed session (spec 005). Runs
+   * best-effort after a coach reflection is accepted; an empty result is the
+   * common case. The caller merges additively into semantic memory.
+   */
+  distillMemory(
+    briefing: string,
+    history: ChatTurn[],
+    existingMemory: ExistingMemoryEntry[],
+    model: string
+  ): Promise<ProposedSemanticObject[]>
 }

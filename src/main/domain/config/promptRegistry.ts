@@ -13,6 +13,7 @@ export type PromptId =
   | 'chat'
   | 'chat.agentic'
   | 'reflection'
+  | 'distill'
   | 'discovery'
 
 export interface PromptMeta {
@@ -71,9 +72,16 @@ export const PROMPT_REGISTRY: PromptMeta[] = [
   {
     id: 'reflection',
     label: 'Session reflection',
-    description: "The player's first-person takeaway when the chat closes, plus task and memory updates.",
+    description: "The player's first-person takeaway when they ask Corky to summarize the session (spec 005).",
     defaultInstructions:
-      "You are Corky, closing out a coaching session you just talked through with the player. The reflection is 2 to 4 short sentences in the player's own voice: what they're taking away and the one or two things they'll do differently next game. Prefer stability with tasks — only add or retire one the conversation actually justifies. Remember only what will still matter games from now: recurring behaviours, confirmed strengths or weaknesses, notable milestones."
+      "You are Corky, closing out a coaching session you just talked through with the player. The reflection is 2 to 4 short sentences in the player's own voice: what they're taking away and the one or two things they'll do differently next game. Anchor it to a specific moment when the conversation pointed at one."
+  },
+  {
+    id: 'distill',
+    label: 'Memory distillation',
+    description: 'What Corky durably remembers about the player after an accepted session reflection (spec 005).',
+    defaultInstructions:
+      'You are Corky, updating what you remember about this player. Remember only what will still matter games from now: recurring behaviours, confirmed strengths or weaknesses, notable milestones. Most sessions add nothing — an empty update is the right call then.'
   },
   {
     id: 'discovery',

@@ -2,10 +2,10 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { FramingOutput, NarrationOutput, ReviewOutput, ChatTurn } from '@shared/types'
 import type {
   MatchCoachingModel, ReviewExtras, TasksExtras, TaskProposal,
-  ReflectionExtras, ReflectionProposal, DiscoveryPlan,
-  AgenticChatExtras, AgenticChatResult
+  DiscoveryPlan, AgenticChatExtras, AgenticChatResult, ExistingMemoryEntry
 } from '../../../application/ports/MatchCoachingModel'
 import type { RawProposal } from '../../../domain/chat/proposal'
+import type { ProposedSemanticObject } from '../../../domain/memory/semanticObject'
 import {
   SUBMIT_REVIEW, buildReviewPrompt, parseReview,
   SUBMIT_FRAMING, buildFramingPrompt, parseFraming,
@@ -13,7 +13,8 @@ import {
   SUBMIT_TASKS, buildTasksPrompt, parseTasks,
   buildSystemPrompt, buildChatMessages,
   SUBMIT_PLAN, buildDiscoveryPrompt, parseDiscoveryPlan,
-  SUBMIT_REFLECTION, buildReflectionPrompt, parseReflection,
+  SUBMIT_REFLECTION_TEXT, buildSummarizePrompt, parseReflectionText,
+  SUBMIT_MEMORY, buildDistillPrompt, parseDistilledMemory,
   PROPOSE_TOOLS, buildAgenticPrompt, parseProposalPayload
 } from './matchPrompts'
 import type { PromptId } from '../../../domain/config/promptRegistry'
@@ -215,26 +216,48 @@ export class AnthropicMatchCoachingModel implements MatchCoachingModel {
     return parseDiscoveryPlan(await this.callTool(system, user, SUBMIT_PLAN, model, 300))
   }
 
-  async summarizeReflection(
+  async summarizeReflectionText(
     briefing: string,
     history: ChatTurn[],
-    extras: ReflectionExtras,
     model: string
-  ): Promise<ReflectionProposal> {
-    const { system, messages } = buildReflectionPrompt(briefing, history, extras, this.instructionsFor('reflection'))
+  ): Promise<{ text: string; refIds: string[] }> {
+    const { system, messages } = buildSummarizePrompt(briefing, history, this.instructionsFor('reflection'))
     const message = await this.createMessage({
       model,
-      // Headroom for the third job (0–3 memory facts) on top of reflection+tasks.
-      max_tokens: 1200,
+      max_tokens: 600,
       system,
       messages,
-      tools: [SUBMIT_REFLECTION],
-      tool_choice: { type: 'tool', name: SUBMIT_REFLECTION.name }
+      tools: [SUBMIT_REFLECTION_TEXT],
+      tool_choice: { type: 'tool', name: SUBMIT_REFLECTION_TEXT.name }
     })
-    const block = message.content.find((c) => c.type === 'tool_use' && c.name === SUBMIT_REFLECTION.name)
+    const block = message.content.find((c) => c.type === 'tool_use' && c.name === SUBMIT_REFLECTION_TEXT.name)
     if (!block || block.input == null) {
-      throw new Error('Match coach did not return a submit_reflection payload')
+      throw new Error('Match coach did not return a submit_reflection_text payload')
     }
-    return parseReflection(block.input)
+    return parseReflectionText(block.input)
+  }
+
+  async distillMemory(
+    briefing: string,
+    history: ChatTurn[],
+    existingMemory: ExistingMemoryEntry[],
+    model: string
+  ): Promise<ProposedSemanticObject[]> {
+    const { system, messages } = buildDistillPrompt(
+      briefing, history, existingMemory, this.instructionsFor('distill')
+    )
+    const message = await this.createMessage({
+      model,
+      max_tokens: 700,
+      system,
+      messages,
+      tools: [SUBMIT_MEMORY],
+      tool_choice: { type: 'tool', name: SUBMIT_MEMORY.name }
+    })
+    const block = message.content.find((c) => c.type === 'tool_use' && c.name === SUBMIT_MEMORY.name)
+    if (!block || block.input == null) {
+      throw new Error('Match coach did not return a submit_memory payload')
+    }
+    return parseDistilledMemory(block.input)
   }
 }

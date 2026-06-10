@@ -3,7 +3,7 @@ import type {
   IpcApi, MatchSummary, MatchPage, MatchPageRequest, MatchReport,
   SummonerProfile, LpSnapshot, CoachReport, SessionAnalysis,
   SessionGoal, SessionGoalInput, MatchAnalysis, AnalyzeMatchOptions,
-  ChatTurn, CoachChatReply, ReflectionOutcome, StandingFocusTask, ProgressSummary,
+  ChatTurn, CoachChatReply, StandingFocusTask, ProgressSummary,
   ChatSession, ChatSessionMeta, ResolveProposalInput, ResolveProposalOutcome,
   Reflection, SaveReflectionInput
 } from '../shared/types'
@@ -33,8 +33,8 @@ const api: IpcApi = {
     ipcRenderer.invoke('reflections:save', input),
   deleteReflection: (matchId: string, reflectionId: string): Promise<void> =>
     ipcRenderer.invoke('reflections:delete', matchId, reflectionId),
-  finalizeReflection: (matchId: string, messages: ChatTurn[]): Promise<ReflectionOutcome> =>
-    ipcRenderer.invoke('coach:reflection:finalize', matchId, messages),
+  summarizeIntoReflection: (matchId: string, sessionId: string, messages: ChatTurn[]): Promise<CoachChatReply> =>
+    ipcRenderer.invoke('coach:summarize', matchId, sessionId, messages),
   getStandingTasks: (): Promise<StandingFocusTask[]> => ipcRenderer.invoke('tasks:standing:get'),
   getProgress: (): Promise<ProgressSummary> => ipcRenderer.invoke('progress:get'),
   listChatSessions: (matchId: string): Promise<ChatSessionMeta[]> =>

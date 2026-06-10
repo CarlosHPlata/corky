@@ -28,7 +28,8 @@ import { AnalyzeSession } from '../application/commands/AnalyzeSession'
 import { AnalyzeMatch } from '../application/commands/AnalyzeMatch'
 import { GetMatchAnalysis } from '../application/queries/GetMatchAnalysis'
 import { CoachChat } from '../application/commands/CoachChat'
-import { FinalizeReflection } from '../application/commands/FinalizeReflection'
+import { SummarizeIntoReflection } from '../application/commands/SummarizeIntoReflection'
+import { DistillSessionMemory } from '../application/commands/DistillSessionMemory'
 import { GetStandingTasks } from '../application/queries/GetStandingTasks'
 import { GetProgress } from '../application/queries/GetProgress'
 import { GetChatSessions } from '../application/queries/GetChatSessions'
@@ -132,23 +133,39 @@ export function buildContainer() {
     matchCoachingModel,
     config.anthropicLightModel
   )
+  // Memory distillation rides coach-reflection acceptance (spec 005 US5):
+  // fire-and-forget from ResolveProposal's hook — never blocks an accept.
+  const distillSessionMemory = new DistillSessionMemory(
+    matchRepo,
+    reportRepo,
+    sessionGoalRepo,
+    chatSessionRepo,
+    semanticMemory,
+    matchCoachingModel,
+    config.anthropicLightModel
+  )
   // The ONLY write path for model-initiated changes (spec 005): accept applies,
-  // reject discards, staleness re-checked at accept time. The distillation hook
-  // arrives with US5 (SummarizeIntoReflection wave).
+  // reject discards, staleness re-checked at accept time.
   const resolveProposal = new ResolveProposal(
     matchRepo,
     reportRepo,
     chatSessionRepo,
-    reflectionRepo
+    reflectionRepo,
+    undefined,
+    (matchId, sessionId) => {
+      void distillSessionMemory
+        .execute(matchId, sessionId)
+        .catch((err) => console.error('memory distillation failed:', err))
+    }
   )
   const saveReflection = new SaveReflection(matchRepo, reportRepo, reflectionRepo)
   const deleteReflection = new DeleteReflection(reflectionRepo)
   const listReflections = new ListReflections(reflectionRepo)
-  const finalizeReflection = new FinalizeReflection(
+  const summarizeIntoReflection = new SummarizeIntoReflection(
     matchRepo,
     reportRepo,
     sessionGoalRepo,
-    semanticMemory,
+    reflectionRepo,
     matchCoachingModel,
     config.anthropicLightModel
   )
@@ -186,7 +203,8 @@ export function buildContainer() {
     analyzeMatch,
     getMatchAnalysis,
     coachChat,
-    finalizeReflection,
+    summarizeIntoReflection,
+    distillSessionMemory,
     getStandingTasks,
     getProgress,
     chatSessionRepo,

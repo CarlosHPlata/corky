@@ -3,7 +3,7 @@ import type {
   FramingOutput, NarrationOutput, HighlightNarration, DeathNarration, TurningPoint
 } from '@shared/types'
 import type {
-  ReviewExtras, TasksExtras, TaskProposal, ReflectionExtras, ReflectionProposal,
+  ReviewExtras, TasksExtras, TaskProposal,
   DiscoveryPlan, DiscoveryRequest, AgenticChatExtras
 } from '../../../application/ports/MatchCoachingModel'
 import type { GeneratedTask } from '../../../domain/report/focusTask'
@@ -55,7 +55,8 @@ function scaffoldFor(passId: PromptId): string {
     case 'tasks': return TASKS_SCAFFOLD
     case 'chat': return CHAT_SCAFFOLD
     case 'chat.agentic': return AGENTIC_SCAFFOLD
-    case 'reflection': return REFLECTION_SCAFFOLD
+    case 'reflection': return SUMMARIZE_SCAFFOLD
+    case 'distill': return DISTILL_SCAFFOLD
     case 'discovery': return DISCOVERY_SCAFFOLD
   }
 }
@@ -787,46 +788,83 @@ export function parseDiscoveryPlan(input: unknown): DiscoveryPlan {
 const MEMORY_KINDS = ['observation', 'pattern', 'strength', 'weakness', 'reflection', 'milestone']
 const MEMORY_PHASES = new Set(['lane', 'mid', 'close'])
 
-const SUBMIT_REFLECTION = {
-  name: 'submit_reflection',
+// ── Summarize-into-reflection (spec 005 US5, replaces finalize) ──────────────
+// One forced-tool call, no loop: the session's takeaway in the player's voice
+// plus optional evidence ref ids. The command wraps it as a standard
+// create_reflection proposal — same confirm-first card as a chat-initiated one.
+
+export const SUBMIT_REFLECTION_TEXT = {
+  name: 'submit_reflection_text',
   description:
-    "Write the player's post-game reflection from the conversation, optionally adjust their standing focus tasks if the talk warrants it, and distill at most 3 durable coaching facts worth remembering across games.",
+    "Write the player's takeaway from this coaching session as a reflection in THEIR first-person voice, optionally anchored to evidence ids from the brief.",
   input_schema: {
     type: 'object' as const,
     additionalProperties: false,
-    required: ['reflection', 'set', 'retire', 'memory'],
+    required: ['text'],
     properties: {
-      reflection: {
+      text: {
         type: 'string',
         description:
-          "The reflection in the PLAYER'S first-person voice, as if they wrote it in their journal — 2 to 4 short sentences drawn from what THEY said: what they're taking away, and the one or two things they'll do differently. Plain text, no headers, no quotation marks."
+          "The reflection, 2 to 4 short sentences in the PLAYER'S first-person voice, drawn from what THEY said: what they're taking away and the one or two things they'll do differently. Plain text, no headers, no quotation marks."
       },
-      set: {
+      refIds: {
         type: 'array',
-        maxItems: 3,
-        description:
-          'ONLY brand-new focus tasks to ADD from this conversation — leave empty if nothing new came up. The current standing tasks are kept automatically; do NOT re-list them here. To remove a current task, put its id in "retire". Each new task uses a computable metric.',
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['description', 'metric', 'comparator', 'target', 'scope'],
-          properties: {
-            description: { type: 'string', description: 'A concrete, checkable next-game task.' },
-            metric: { type: 'string', description: 'One of the provided computable metric keys.' },
-            comparator: { type: 'string', enum: ['>=', '<=', '==', '>', '<'] },
-            target: { type: 'number' },
-            scope: { type: 'string', enum: ['champion', 'role', 'universal'] },
-            champion: { type: 'string' },
-            role: { type: 'string' }
-          }
-        }
-      },
-      retire: { type: 'array', items: { type: 'string' }, description: 'Ids of standing tasks to retire.' },
+        maxItems: 5,
+        items: { type: 'string' },
+        description: 'Evidence ids from the brief (stat:/marker:/task: grammar) the takeaway is anchored to.'
+      }
+    }
+  }
+}
+
+const SUMMARIZE_SCAFFOLD = `You are closing out a coaching session — you have just talked through the player's game with them. Call submit_reflection_text.
+
+Write the player's post-game reflection in THEIR first-person voice, drawn from what THEY said in the conversation — not your verdict.
+
+Output contract (locked):
+- The reflection is the PLAYER'S voice and their conclusions — never put words in their mouth or invent a number.
+- Plain text only, no headers, no quotation marks, 2 to 4 short sentences.
+- refIds only from ids visible in the brief (stat:/marker:) or task:<id> for a standing task; omit it when nothing specific anchors the takeaway.`
+
+export function buildSummarizePrompt(
+  briefing: string,
+  history: { role: 'user' | 'assistant'; text: string }[],
+  instructions?: string
+): { system: string; messages: { role: 'user' | 'assistant'; content: string }[] } {
+  const closing =
+    "We're done talking. Write my reflection from what I said. Call submit_reflection_text."
+  return {
+    system: buildSystemPrompt('reflection', instructions),
+    messages: buildChatMessages(briefing, history).concat({ role: 'user', content: closing })
+  }
+}
+
+/** Validate + coerce the summarize payload. Throws on anything unusable. */
+export function parseReflectionText(input: unknown): { text: string; refIds: string[] } {
+  if (!input || typeof input !== 'object') throw new Error('Summarize model returned no payload')
+  const o = input as Record<string, unknown>
+  const text = nonEmpty(o.text)
+  if (!text) throw new Error('Summarize model returned no reflection text')
+  const refIds = (Array.isArray(o.refIds) ? o.refIds : []).filter(
+    (s): s is string => typeof s === 'string' && s.trim().length > 0
+  )
+  return { text, refIds }
+}
+
+// ── Memory distillation (spec 005 US5, rides coach-reflection acceptance) ────
+
+export const SUBMIT_MEMORY = {
+  name: 'submit_memory',
+  description:
+    'Distill at most 3 durable, longitudinal coaching facts from this session — facts worth remembering ACROSS games, not match recap. Return an EMPTY array when the session surfaced nothing durable (the common case).',
+  input_schema: {
+    type: 'object' as const,
+    additionalProperties: false,
+    required: ['memory'],
+    properties: {
       memory: {
         type: 'array',
         maxItems: 3,
-        description:
-          'At most 3 durable, longitudinal coaching facts distilled from this session — facts worth remembering ACROSS games, not match recap. Return an EMPTY array when the session surfaced nothing durable (the common case).',
         items: {
           type: 'object',
           additionalProperties: false,
@@ -845,54 +883,48 @@ const SUBMIT_REFLECTION = {
   }
 }
 
-export { SUBMIT_REFLECTION }
-
-const REFLECTION_SCAFFOLD = `You are closing out a coaching session — you have just talked through the player's game with them. Call submit_reflection.
-
-Three jobs:
-1. "reflection": the player's post-game reflection in THEIR first-person voice, drawn from what THEY said in the conversation — not your verdict. Plain text only, no headers, no quotation marks.
-2. Optionally adjust their focus tasks. The current standing tasks are KEPT automatically — you never need to re-list them. Only use "set" to ADD a brand-new task the conversation clearly surfaced, and "retire" to drop a current task by id. In most sessions you change nothing: return an EMPTY "set" and an EMPTY "retire".
-3. Distill AT MOST 3 durable coaching facts from this session into "memory", each phrased to stand alone without this match's context. When an EXISTING MEMORY entry (the MEMORY lines in the closing message) covers the same subject, restate it refreshed with what this session added rather than inventing a near-duplicate. Most sessions contain nothing durable: return an EMPTY "memory" array then.
+const DISTILL_SCAFFOLD = `You are updating what you durably remember about a player after a coaching session. Call submit_memory.
 
 Output contract (locked):
-- The reflection is the PLAYER'S voice and their conclusions — never put words in their mouth or invent a number.
-- Do NOT re-list existing tasks in "set" — that's only for new ones. Leaving "set" empty does NOT remove anything.
-- Every new task's "metric" MUST be one of the computable metric keys listed. Do not invent a metric.
-- Memory is for facts that will still matter games from now — never a one-off match recap, never an invented number.`
+- Memory is for facts that will still matter games from now — never a one-off match recap, never an invented number.
+- When an EXISTING MEMORY entry (the MEMORY lines) covers the same subject, restate it refreshed with what this session added rather than inventing a near-duplicate.
+- Most sessions contain nothing durable: return an EMPTY "memory" array then.`
 
-export function buildReflectionPrompt(
+/** One existing-memory projection entry (mirrors the port's shape). */
+export interface ExistingMemoryEntry {
+  kind: string
+  champion?: string
+  role?: string
+  phase?: string
+  metric?: string
+  statement: string
+  occurrences: number
+}
+
+export function buildDistillPrompt(
   briefing: string,
   history: { role: 'user' | 'assistant'; text: string }[],
-  extras: ReflectionExtras,
+  existingMemory: ExistingMemoryEntry[],
   instructions?: string
 ): { system: string; messages: { role: 'user' | 'assistant'; content: string }[] } {
-  const standing = extras.standing.length
-    ? extras.standing
-        .map((t) => `  - [${t.id}] ${t.description} (${t.metric} ${t.comparator} ${t.target}, ${t.scope})`)
-        .join('\n')
-    : '  (none yet)'
-  const goal = extras.goal ? `\nThe player is working on: ${extras.goal}` : ''
-  const memory = extras.existingMemory.length
-    ? extras.existingMemory.map(renderMemoryLine).join('\n')
+  const memory = existingMemory.length
+    ? existingMemory.map(renderMemoryLine).join('\n')
     : 'MEMORY none'
-  const closing = `We're done talking. Now write my reflection from what I said, keep my focus tasks current, and update what you remember about me.
+  const closing = `The session is closed. Update what you remember about this player.
 
-Computable metric keys: ${extras.catalogMetricKeys.join(', ')}
-Current standing focus tasks:
-${standing}${goal}
-What you already remember about this player:
+What you already remember:
 ${memory}
 
-Call submit_reflection.`
+Call submit_memory.`
   return {
-    system: buildSystemPrompt('reflection', instructions),
+    system: buildSystemPrompt('distill', instructions),
     messages: buildChatMessages(briefing, history).concat({ role: 'user', content: closing })
   }
 }
 
-/** Render one existing-memory entry as a compact MEMORY line for the closing
- * message, e.g. `MEMORY kind=pattern champ=ahri x3 "dies solo in river 14-20min"`. */
-function renderMemoryLine(m: ReflectionExtras['existingMemory'][number]): string {
+/** Render one existing-memory entry as a compact MEMORY line,
+ * e.g. `MEMORY kind=pattern champ=ahri x3 "dies solo in river 14-20min"`. */
+function renderMemoryLine(m: ExistingMemoryEntry): string {
   const tags = [
     `kind=${m.kind}`,
     ...(m.champion ? [`champ=${m.champion}`] : []),
@@ -906,7 +938,8 @@ function renderMemoryLine(m: ReflectionExtras['existingMemory'][number]): string
 // Coerce the raw `memory` payload into proposed semantic objects, dropping any
 // entry that isn't well-formed (isValidProposedObject) and tolerating the field
 // missing entirely — an absent/empty array is the common "nothing durable" case.
-function parseMemory(o: Record<string, unknown>): ProposedSemanticObject[] {
+export function parseDistilledMemory(input: unknown): ProposedSemanticObject[] {
+  const o = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
   const memory: ProposedSemanticObject[] = []
   for (const raw of Array.isArray(o.memory) ? o.memory : []) {
     if (!raw || typeof raw !== 'object') continue
@@ -928,12 +961,4 @@ function parseMemory(o: Record<string, unknown>): ProposedSemanticObject[] {
     if (isValidProposedObject(candidate)) memory.push(candidate)
   }
   return memory.slice(0, 3)
-}
-
-export function parseReflection(input: unknown): ReflectionProposal {
-  if (!input || typeof input !== 'object') throw new Error('Reflection model returned no payload')
-  const o = input as Record<string, unknown>
-  const reflection = nonEmpty(o.reflection)
-  if (!reflection) throw new Error('Reflection model returned no reflection text')
-  return { reflection, tasks: parseTaskProposal(o), memory: parseMemory(o) }
 }

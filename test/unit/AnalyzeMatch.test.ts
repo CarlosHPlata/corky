@@ -26,7 +26,8 @@ function fakeModel(over: Partial<MatchCoachingModel> = {}): MatchCoachingModel {
     chat: vi.fn().mockResolvedValue('reply'),
     chatAgentic: vi.fn().mockResolvedValue({ reply: 'reply' }),
     planDiscovery: vi.fn().mockResolvedValue({ requests: [] }),
-    summarizeReflection: vi.fn().mockRejectedValue(new Error('nope')),
+    summarizeReflectionText: vi.fn().mockRejectedValue(new Error('nope')),
+    distillMemory: vi.fn().mockResolvedValue([]),
     ...over
   }
 }

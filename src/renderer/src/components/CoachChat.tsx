@@ -118,16 +118,15 @@ export function CoachChat({ matchId, core, review, standing = [], onTasksUpdated
     if (kind !== 'update_tasks') onReflectionsChanged?.()
   }
 
-  // "Save reflection": Corky writes the session's takeaway and it lands in the
-  // Reflections panel (the main process stores it coach-authored). Becomes the
-  // proposal-based "Summarize into a reflection" in US5.
-  async function finalize(): Promise<void> {
-    if (finalizing || thinking || !hydrated) return
+  // "Summarize into a reflection" (spec 005 US5): Corky drafts the session's
+  // takeaway as a standard create_reflection proposal card — accept stores it
+  // in the Reflections panel, reject discards. Tasks never ride this step.
+  async function summarize(): Promise<void> {
+    if (finalizing || thinking || !hydrated || userTurns === 0) return
     setFinalizing(true)
     try {
-      const outcome = await window.api.finalizeReflection(matchId, msgs)
-      if (outcome.reflection) onReflectionsChanged?.()
-      if (outcome.tasksUpdated && outcome.analysis) onTasksUpdated?.(outcome.analysis)
+      const reply = await window.api.summarizeIntoReflection(matchId, activeId, msgs)
+      sessions.appendTurn(reply.proposalTurn ?? { role: 'assistant', text: reply.reply })
     } catch {
       // leave the player in the chat if it fails
     } finally {
@@ -164,10 +163,10 @@ export function CoachChat({ matchId, core, review, standing = [], onTasksUpdated
           <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14.5, color: 'var(--text-primary)' }}>Settle next game with Corky</div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)' }}>he's read your {core.champion} game · tasks change only when you accept</div>
         </div>
-        <Button variant="secondary" size="sm" onClick={finalize} disabled={finalizing || thinking || userTurns === 0}
+        <Button variant="secondary" size="sm" onClick={summarize} disabled={finalizing || thinking || userTurns === 0}
           iconLeft={<Icon name={finalizing ? 'refresh-cw' : 'file-text'} size={14} className={finalizing ? 'ck-spin' : ''} />}
           style={{ flex: 'none' }}>
-          {finalizing ? 'Writing…' : 'Save reflection'}
+          {finalizing ? 'Writing…' : 'Summarize into a reflection'}
         </Button>
       </div>
 

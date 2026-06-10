@@ -53,6 +53,8 @@ export interface ChatSessionsApi {
   switchTo: (sessionId: string) => Promise<void>
   /** Start a fresh draft session (reuses the current draft if still untouched). */
   newChat: () => void
+  /** Append a turn produced outside `send` (e.g. the summarize flow). */
+  appendTurn: (turn: ChatTurn) => void
 }
 
 export function useChatSessions(matchId: string, opener: ChatTurn): ChatSessionsApi {
@@ -216,5 +218,10 @@ export function useChatSessions(matchId: string, opener: ChatTurn): ChatSessions
     activate(mintSessionId(matchId), [opener], true)
   }
 
-  return { msgs, metas, activeId, isDraft, hydrated, thinking, resolving, send, resolve, switchTo, newChat }
+  function appendTurn(turn: ChatTurn): void {
+    if (hydratedFor.current !== matchId) return
+    setMsgs((cur) => cur.concat(turn))
+  }
+
+  return { msgs, metas, activeId, isDraft, hydrated, thinking, resolving, send, resolve, switchTo, newChat, appendTurn }
 }
