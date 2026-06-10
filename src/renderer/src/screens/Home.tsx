@@ -9,9 +9,9 @@ import { FocusTask } from '../components/coaching/FocusTask'
 import { ChampAvatar } from '../components/ChampAvatar'
 import { GoalNotes } from '../components/GoalNotes'
 import { Icon } from '../components/Icon'
-import { MATCHES, REPORT_LOSS, REPORT_WIN } from '../data/mockData'
 import type { AppData } from '../data/useAppData'
 import { useQuickAnalysis } from '../data/useQuickAnalysis'
+import { useStandingTasks } from '../data/useStandingTasks'
 import type {
   MatchSummary, SummonerProfile, LpSnapshot,
   SessionInsight, InsightLeak, BenchmarkBasis
@@ -133,26 +133,28 @@ function Hero({ profile, matches, net, onNav }: {
   )
 }
 
-// ── NextFocus: last game's next-game tasks (mock — analysis layer, wired later) ──
+// ── NextFocus: the player's standing focus tasks (global, kept current by the
+//    analysis pass + reflection chat — spec 004). Empty until the first analysis. ──
 function NextFocus({ onOpen, latestMatchId }: { onOpen: (matchId: string) => void; latestMatchId?: string }) {
-  const latest = MATCHES[0]
-  const report = latest.win ? REPORT_WIN : REPORT_LOSS
-  const tasks = report.nextFocus
+  const { tasks, loading } = useStandingTasks()
+  const hasTasks = tasks.length > 0
   return (
     <Card accent="objective" padding={18}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 13, marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 13, marginBottom: hasTasks ? 14 : 0 }}>
         <span style={{ width: 38, height: 38, flex: 'none', borderRadius: 'var(--radius-md)', display: 'grid', placeItems: 'center', background: 'var(--objective-soft)' }}>
           <Icon name="crosshair" size={20} style={{ color: 'var(--violet-400)' }} />
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18, color: 'var(--text-primary)', lineHeight: 1.15 }}>Next-game focus</span>
-            <Badge intent="objective" dot>{tasks.length} tasks</Badge>
+            {hasTasks && <Badge intent="objective" dot>{tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}</Badge>}
           </div>
           <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.55, margin: '4px 0 0' }}>
-            Set from your last game —{' '}
-            <strong style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{latest.champ} {latest.win ? 'win' : 'loss'}</strong>.
-            {' '}Corky checks these automatically after your next game.
+            {hasTasks
+              ? 'Your standing focus. Corky checks these automatically after each game and keeps them current.'
+              : loading
+                ? 'Loading your focus tasks…'
+                : 'No focus tasks yet. Analyse a game and Corky sets your next-game focus here.'}
           </p>
         </div>
         <Button variant="ghost" size="sm" onClick={() => latestMatchId && onOpen(latestMatchId)}
@@ -161,9 +163,14 @@ function NextFocus({ onOpen, latestMatchId }: { onOpen: (matchId: string) => voi
           Last report
         </Button>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {tasks.map((t, i) => <FocusTask key={i} {...t} />)}
-      </div>
+      {hasTasks && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {tasks.map((t) => (
+            <FocusTask key={t.id} description={t.description} metric={t.metric}
+              comparator={t.comparator} target={t.target} scope={t.scope} result="pending" />
+          ))}
+        </div>
+      )}
     </Card>
   )
 }

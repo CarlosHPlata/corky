@@ -429,6 +429,31 @@ export interface AnalyzeMatchOptions {
   reflection?: string
 }
 
+/** One turn of the post-game coaching chat (spec 004). The renderer holds the
+ * transcript locally; the main process rebuilds context per call from the stored
+ * match + analysis, so secrets never cross preload (Constitution VI). */
+export interface ChatTurn {
+  role: 'user' | 'assistant'
+  text: string
+}
+
+/** Corky's reply to a single chat turn. */
+export interface CoachChatReply {
+  reply: string
+}
+
+/** Result of finalising a coaching session: the written reflection plus any
+ * adjustment Corky made to the standing focus tasks off the back of the talk. */
+export interface ReflectionOutcome {
+  /** The reflection Corky wrote in the player's first-person voice. */
+  reflection: string
+  /** The refreshed analysis when the standing focus tasks changed; null otherwise.
+   * Lets the report re-render its Next-game focus section without a re-analyse. */
+  analysis: MatchAnalysis | null
+  /** True when finalising changed the standing focus-task set. */
+  tasksUpdated: boolean
+}
+
 export interface IpcApi {
   /** `start` fetches an older Riot window (match-v5 offset) for infinite scroll. */
   syncMatches: (count: number, start?: number) => Promise<void>
@@ -444,6 +469,15 @@ export interface IpcApi {
   analyzeMatch: (matchId: string, opts?: AnalyzeMatchOptions) => Promise<MatchAnalysis>
   /** Restore the stored analysis for a match (no model call), or null if never run. */
   getMatchAnalysis: (matchId: string) => Promise<MatchAnalysis | null>
+  /** Send the chat transcript to Corky and get his next coaching reply (spec 004).
+   * Context (this game's facts + Corky's read) is rebuilt in the main process. */
+  coachChat: (matchId: string, messages: ChatTurn[]) => Promise<CoachChatReply>
+  /** Finalise the coaching session: Corky writes the reflection and may adjust the
+   * standing focus tasks. Persists task changes; returns the written reflection. */
+  finalizeReflection: (matchId: string, messages: ChatTurn[]) => Promise<ReflectionOutcome>
+  /** The player's current standing focus tasks (global, 1–3). Empty until the
+   * first game is analysed. Drives the Home "Next-game focus" card. */
+  getStandingTasks: () => Promise<StandingFocusTask[]>
   getCoachReport: (matchId: string) => Promise<CoachReport | null>
   /** Generate a fresh analysis and persist it as the account's latest. */
   runSessionAnalysis: () => Promise<SessionAnalysis>

@@ -8,6 +8,7 @@ import { Card } from '../components/core/Card'
 import { StatBlock } from '../components/core/StatBlock'
 import { Button } from '../components/core/Button'
 import { ChampAvatar } from '../components/ChampAvatar'
+import { CoachChat } from '../components/CoachChat'
 import { Icon } from '../components/Icon'
 import { useMatchReport } from '../data/useMatchReport'
 import { useMatchAnalysis } from '../data/useMatchAnalysis'
@@ -221,11 +222,22 @@ function deathNarrationByN(narrations?: DeathNarration[]): Map<number, DeathNarr
   return m
 }
 
-function DeathMap({ dm, narrations }: { dm: DeathMapData; narrations?: DeathNarration[] }) {
+function DeathMap({ dm, narrations, onActiveDeath }: {
+  dm: DeathMapData; narrations?: DeathNarration[]; onActiveDeath?: (tMin: number | null) => void
+}) {
   const byN = deathNarrationByN(narrations)
   const hasNarr = byN.size > 0
   const [sel, setSel] = useState<number | null>(null)
-  useEffect(() => { setSel(null) }, [dm])
+  const [hover, setHover] = useState<number | null>(null)
+  useEffect(() => { setSel(null); setHover(null) }, [dm])
+
+  // The death currently in focus (hover wins over click). Pushed up so the
+  // timeline can mark the same moment.
+  const activeN = hover ?? sel
+  useEffect(() => {
+    const d = activeN != null ? dm.deaths.find(x => x.n === activeN) : undefined
+    onActiveDeath?.(d ? d.tMin : null)
+  }, [activeN, dm, onActiveDeath])
 
   const selected = sel != null ? byN.get(sel) : undefined
 
@@ -246,8 +258,10 @@ function DeathMap({ dm, narrations }: { dm: DeathMapData; narrations?: DeathNarr
             <div className="ck-minimap" style={{ width: 150, height: 150, flex: 'none' }}>
               <div className="ck-minimap__grid" />
               {dm.deaths.map(d => (
-                <span key={d.n} className="ck-minimap__death" onClick={hasNarr ? () => setSel(d.n) : undefined}
-                  style={{ left: d.xPct + '%', top: d.yPct + '%', background: 'var(--loss)', cursor: hasNarr ? 'pointer' : 'default', outline: sel === d.n ? '2px solid var(--gold-400)' : 'none' }}>
+                <span key={d.n} className="ck-minimap__death"
+                  onClick={hasNarr ? () => setSel(d.n) : undefined}
+                  onMouseEnter={() => setHover(d.n)} onMouseLeave={() => setHover(h => (h === d.n ? null : h))}
+                  style={{ left: d.xPct + '%', top: d.yPct + '%', background: 'var(--loss)', cursor: 'pointer', outline: activeN === d.n ? '2px solid var(--gold-400)' : 'none' }}>
                   {d.n}
                 </span>
               ))}
@@ -255,7 +269,11 @@ function DeathMap({ dm, narrations }: { dm: DeathMapData; narrations?: DeathNarr
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
               {dm.deaths.map(d => {
                 const narr = byN.get(d.n)
-                const active = sel === d.n
+                const isActive = activeN === d.n
+                const hoverProps = {
+                  onMouseEnter: () => setHover(d.n),
+                  onMouseLeave: () => setHover(h => (h === d.n ? null : h)),
+                }
                 const row = (
                   <>
                     <span className="ck-death-n" style={{ background: 'var(--loss)' }}>{d.n}</span>
@@ -266,13 +284,17 @@ function DeathMap({ dm, narrations }: { dm: DeathMapData; narrations?: DeathNarr
                   </>
                 )
                 return narr ? (
-                  <button key={d.n} onClick={() => setSel(active ? null : d.n)}
+                  <button key={d.n} onClick={() => setSel(sel === d.n ? null : d.n)} {...hoverProps}
                     style={{ display: 'flex', gap: 9, alignItems: 'center', padding: '4px 6px', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer', textAlign: 'left',
-                      background: active ? 'rgba(242,179,61,0.10)' : 'transparent' }}>
+                      background: isActive ? 'rgba(242,179,61,0.10)' : 'transparent' }}>
                     {row}
                   </button>
                 ) : (
-                  <div key={d.n} style={{ display: 'flex', gap: 9, alignItems: 'center', padding: '4px 6px' }}>{row}</div>
+                  <div key={d.n} {...hoverProps}
+                    style={{ display: 'flex', gap: 9, alignItems: 'center', padding: '4px 6px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                      background: isActive ? 'rgba(242,179,61,0.10)' : 'transparent' }}>
+                    {row}
+                  </div>
                 )
               })}
             </div>
@@ -394,11 +416,15 @@ export function CoachReport({ matchId, onAnalyzed }: {
 
   // AI analysis ("Corky's read"). Restored on open from the stored read (no model
   // call); runs the real four-pass pipeline on demand (spec 004).
-  const { analysis, state, run } = useMatchAnalysis(matchId)
+  const { analysis, state, run, apply } = useMatchAnalysis(matchId)
   const analyzing = state === 'running'
   const runAnalyze = (): void => run()
   // Notify the host once a read is in (keeps any host-level "analyzed" flag in sync).
   useEffect(() => { if (analysis?.review) onAnalyzed?.() }, [analysis?.review, onAnalyzed])
+
+  // Death ↔ timeline link: the time (mins) of the death currently hovered/clicked
+  // in the death map, so the timeline marks the same moment.
+  const [activeDeathTime, setActiveDeathTime] = useState<number | null>(null)
 
   // Pin / save the game.
   const [pinned, setPinned] = useState(() => loadPins().includes(matchId))
@@ -503,6 +529,7 @@ export function CoachReport({ matchId, onAnalyzed }: {
               duration={formatDuration(core.durationSec)}
               curve={report.timeline.frames.map(f => f.goldDiff / 1000)}
               events={toTimelineEvents(report.timeline.highlights)}
+              markerTime={activeDeathTime}
             />
           </div>
         ) : (
@@ -512,7 +539,7 @@ export function CoachReport({ matchId, onAnalyzed }: {
           <Breakdown b={report.breakdown} />
         </div>
         {report.deathMap
-          ? <DeathMap dm={report.deathMap} narrations={narration?.deathNarrations} />
+          ? <DeathMap dm={report.deathMap} narrations={narration?.deathNarrations} onActiveDeath={setActiveDeathTime} />
           : <UnavailableNote what="The death map" />}
       </section>
 
@@ -603,12 +630,14 @@ export function CoachReport({ matchId, onAnalyzed }: {
           : <GatedBlock title="How you did on last game’s focus tasks" hint="Analysis checks this game against the tasks Corky set you last time." analyzing={analyzing} onAnalyze={runAnalyze} />}
       </section>
 
-      {/* Reflect on the analysis — only appears once Corky's read is in */}
+      {/* Coach Corky — a live coaching chat, only once Corky's read is in. The
+          briefing (this game + Corky's read + your goal) is rebuilt server-side
+          on open, so the chat coaches off THIS game. "Save reflection" writes the
+          reflection from the conversation and may re-shape the focus tasks. */}
       {analyzed && (
         <section>
-          <SectionLabel icon="sparkles">Reflect on Corky’s read</SectionLabel>
-          <NotePad storeKey={'ck-postreflect-' + matchId} accent="accent"
-            placeholder="Now you’ve seen Corky’s read — what do you make of it? Agree, disagree, what you’ll change…" />
+          <SectionLabel icon="message-circle">Coach Corky</SectionLabel>
+          <CoachChat matchId={matchId} core={core} review={review} onTasksUpdated={apply} />
         </section>
       )}
     </div>

@@ -2,7 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   IpcApi, MatchSummary, MatchPage, MatchPageRequest, MatchReport,
   SummonerProfile, LpSnapshot, CoachReport, SessionAnalysis,
-  SessionGoal, SessionGoalInput, MatchAnalysis, AnalyzeMatchOptions
+  SessionGoal, SessionGoalInput, MatchAnalysis, AnalyzeMatchOptions,
+  ChatTurn, CoachChatReply, ReflectionOutcome, StandingFocusTask
 } from '../shared/types'
 
 const api: IpcApi = {
@@ -19,6 +20,11 @@ const api: IpcApi = {
     ipcRenderer.invoke('analysis:match:run', matchId, opts),
   getMatchAnalysis: (matchId: string): Promise<MatchAnalysis | null> =>
     ipcRenderer.invoke('analysis:match:get', matchId),
+  coachChat: (matchId: string, messages: ChatTurn[]): Promise<CoachChatReply> =>
+    ipcRenderer.invoke('coach:chat', matchId, messages),
+  finalizeReflection: (matchId: string, messages: ChatTurn[]): Promise<ReflectionOutcome> =>
+    ipcRenderer.invoke('coach:reflection:finalize', matchId, messages),
+  getStandingTasks: (): Promise<StandingFocusTask[]> => ipcRenderer.invoke('tasks:standing:get'),
   getCoachReport: (matchId: string): Promise<CoachReport | null> =>
     ipcRenderer.invoke('report:get', matchId),
   runSessionAnalysis: (): Promise<SessionAnalysis> => ipcRenderer.invoke('analysis:session:run'),

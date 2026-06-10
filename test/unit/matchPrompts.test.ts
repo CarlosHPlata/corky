@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { parseReview, parseFraming, parseNarration, parseTasks } from '../../src/main/adapters/driven/anthropic/matchPrompts'
+import { parseReview, parseFraming, parseNarration, parseTasks, parseReflection } from '../../src/main/adapters/driven/anthropic/matchPrompts'
 import {
   AnthropicMatchCoachingModel,
   type CreateMessage
@@ -147,5 +147,44 @@ describe('AnthropicMatchCoachingModel.analyzeReview', () => {
     const create: CreateMessage = vi.fn().mockResolvedValue({ content: [{ type: 'text' }] })
     const model = new AnthropicMatchCoachingModel(create)
     await expect(model.analyzeReview('x', extras, 'm')).rejects.toThrow()
+  })
+})
+
+describe('parseReflection', () => {
+  it('returns the reflection text and a clamped, computable task set', () => {
+    const out = parseReflection({
+      reflection: 'I kept roaming alone with a lead. Next game I recall and group by 24.',
+      set: [
+        { description: "Don't die alone in the river.", metric: 'solo_deaths', comparator: '==', target: 0, scope: 'universal' },
+        { description: 'bad metric', metric: 'not_a_metric', comparator: '>=', target: 1, scope: 'universal' }
+      ],
+      retire: ['old-1']
+    })
+    expect(out.reflection).toContain('group by 24')
+    expect(out.tasks.set).toHaveLength(1) // the uncomputable metric is dropped
+    expect(out.tasks.retire).toEqual(['old-1'])
+  })
+
+  it('throws when the reflection text is empty', () => {
+    expect(() => parseReflection({ reflection: '   ', set: [], retire: [] })).toThrow()
+  })
+})
+
+describe('AnthropicMatchCoachingModel.chat', () => {
+  it('sends the briefing as the first user turn and returns the text reply', async () => {
+    const create: CreateMessage = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: '  So what were you trying to do there?  ' }] })
+    const model = new AnthropicMatchCoachingModel(create)
+    const reply = await model.chat('BRIEFING', [{ role: 'assistant', text: 'opener' }, { role: 'user', text: 'I went for a pick' }], 'claude-haiku-4-5')
+    expect(reply).toBe('So what were you trying to do there?')
+    const params = (create as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    expect(params.messages[0]).toEqual({ role: 'user', content: 'BRIEFING' })
+    expect(params.messages.at(-1)).toEqual({ role: 'user', content: 'I went for a pick' })
+    expect(params.tool_choice).toBeUndefined()
+  })
+
+  it('throws on an empty reply', async () => {
+    const create: CreateMessage = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: '' }] })
+    const model = new AnthropicMatchCoachingModel(create)
+    await expect(model.chat('B', [], 'm')).rejects.toThrow()
   })
 })

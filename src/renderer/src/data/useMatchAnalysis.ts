@@ -8,6 +8,9 @@ export interface UseMatchAnalysis {
   state: AnalysisState
   /** Run (or re-run with force) the four-pass analysis for this match. */
   run: (force?: boolean) => void
+  /** Replace the in-memory read with a server-returned one (e.g. after the coach
+   * chat re-shapes the standing focus tasks) — no model call. */
+  apply: (analysis: MatchAnalysis) => void
 }
 
 function readReflection(matchId: string): string | undefined {
@@ -71,5 +74,7 @@ export function useMatchAnalysis(matchId: string): UseMatchAnalysis {
     [matchId, settle]
   )
 
-  return { analysis, state, run }
+  const apply = useCallback((a: MatchAnalysis) => settle(a), [settle])
+
+  return { analysis, state, run, apply }
 }

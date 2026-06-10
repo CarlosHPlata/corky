@@ -29,3 +29,36 @@ export function enforceStandingSet(tasks: StandingFocusTask[]): StandingFocusTas
     .filter((t) => t.status === 'active' && isValidTask(t))
     .slice(0, MAX_ACTIVE)
 }
+
+/**
+ * Merge a model's proposed set into the current standing set, preserving the id
+ * (and source match) of any task whose metric/comparator/target/scope already
+ * exists, and minting `${idSeed}-task-${i}` for genuinely new ones. Enforces the
+ * 1–3 computable-only invariant. Shared by the analysis pass (idSeed = matchId)
+ * and the session-reflection finalize (idSeed = `${matchId}-refl`), so the two
+ * never collide on ids. Pure.
+ */
+export function mergeStanding(
+  proposed: GeneratedTask[],
+  standing: StandingFocusTask[],
+  idSeed: string
+): StandingFocusTask[] {
+  const candidates: StandingFocusTask[] = proposed.map((g, i) => {
+    const existing = standing.find(
+      (s) => s.metric === g.metric && s.comparator === g.comparator && s.target === g.target && s.scope === g.scope
+    )
+    return {
+      id: existing?.id ?? `${idSeed}-task-${i}`,
+      description: g.description,
+      metric: g.metric,
+      comparator: g.comparator,
+      target: g.target,
+      scope: g.scope,
+      ...(g.champion ? { champion: g.champion } : {}),
+      ...(g.role ? { role: g.role } : {}),
+      status: 'active',
+      sourceMatchId: existing?.sourceMatchId ?? idSeed
+    }
+  })
+  return enforceStandingSet(candidates)
+}

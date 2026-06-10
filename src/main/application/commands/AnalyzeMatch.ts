@@ -1,11 +1,11 @@
 import type {
   MatchAnalysis, AnalyzeMatchOptions, PassKey, SectionStatus, MatchReport,
-  FramingOutput, NarrationOutput, ReviewOutput, TasksOutput, StandingFocusTask, FocusTaskEval
+  FramingOutput, NarrationOutput, ReviewOutput, TasksOutput, FocusTaskEval
 } from '@shared/types'
 import type { MatchRepository } from '../ports/MatchRepository'
 import type { SummonerRepository } from '../ports/SummonerRepository'
 import type { ReportRepository } from '../ports/ReportRepository'
-import type { MatchCoachingModel, BenchmarkRef, TaskProposal } from '../ports/MatchCoachingModel'
+import type { MatchCoachingModel, BenchmarkRef } from '../ports/MatchCoachingModel'
 import type { BenchmarkDataSource } from '../ports/BenchmarkDataSource'
 import type { SessionGoalRepository } from '../ports/SessionGoalRepository'
 import { assembleMatchReport } from '../../domain/report/assembleMatchReport'
@@ -14,7 +14,7 @@ import { toCompactContext } from '../../domain/report/compactContext'
 import { resolveGeneralBenchmark } from '../../domain/benchmark'
 import { computeMetric, METRIC_KEYS } from '../../domain/report/metricRegistry'
 import { evaluateTask } from '../../domain/report/taskEvaluation'
-import { enforceStandingSet } from '../../domain/report/focusTask'
+import { mergeStanding } from '../../domain/report/focusTask'
 
 interface PassResult<T> {
   value: T | null
@@ -191,7 +191,7 @@ export class AnalyzeMatch {
         { standing, sinceLast, goal, catalogMetricKeys: METRIC_KEYS },
         this.heavyModel
       )
-      const newStanding = this.mergeStanding(proposal, standing, matchId)
+      const newStanding = mergeStanding(proposal.set, standing, matchId)
       const keepIds = new Set(newStanding.map((t) => t.id))
       const toRetire = [
         ...standing.filter((s) => !keepIds.has(s.id)).map((s) => s.id),
@@ -207,27 +207,6 @@ export class AnalyzeMatch {
     }
   }
 
-  /** Merge the model's proposal into the standing set, preserving ids on a match. */
-  private mergeStanding(proposal: TaskProposal, standing: StandingFocusTask[], matchId: string): StandingFocusTask[] {
-    const candidates: StandingFocusTask[] = proposal.set.map((g, i) => {
-      const existing = standing.find(
-        (s) => s.metric === g.metric && s.comparator === g.comparator && s.target === g.target && s.scope === g.scope
-      )
-      return {
-        id: existing?.id ?? `${matchId}-task-${i}`,
-        description: g.description,
-        metric: g.metric,
-        comparator: g.comparator,
-        target: g.target,
-        scope: g.scope,
-        ...(g.champion ? { champion: g.champion } : {}),
-        ...(g.role ? { role: g.role } : {}),
-        status: 'active',
-        sourceMatchId: existing?.sourceMatchId ?? matchId
-      }
-    })
-    return enforceStandingSet(candidates)
-  }
 }
 
 function summarizeFraming(f: FramingOutput): string {

@@ -373,6 +373,54 @@ code, kbd, samp, pre { font-family: var(--font-mono); }
 
 .ck-inline-dots { font-family: var(--font-mono); font-size: 13px; letter-spacing: 2px; color: var(--text-faint); }
 
+/* ---------- Coaching chat (post-game reflection) ---------- */
+.ckc-card { display: flex; flex-direction: column; overflow: hidden; }
+.ckc-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); }
+.ckc-head__id {
+  flex: none; width: 34px; height: 34px; border-radius: var(--radius-md); display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--gold-400);
+}
+.ckc-thread { display: flex; flex-direction: column; gap: 16px; padding: 18px 16px; max-height: 420px; overflow-y: auto; }
+.ckc-row { display: flex; gap: 10px; align-items: flex-start; }
+.ckc-row--me { flex-direction: row-reverse; }
+.ckc-ava {
+  flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; margin-top: 1px;
+  background: var(--accent-soft); color: var(--gold-400);
+}
+.ckc-bubble {
+  max-width: 80%; padding: 10px 13px; font-family: var(--font-sans); font-size: 14px; line-height: 1.55;
+  white-space: pre-wrap;
+}
+.ckc-bubble--corky {
+  background: var(--bg-card-raised); border: 1px solid var(--border-subtle); color: var(--text-secondary);
+  border-radius: 4px var(--radius-lg) var(--radius-lg) var(--radius-lg);
+}
+.ckc-bubble--me {
+  background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  color: var(--text-primary); border-radius: var(--radius-lg) 4px var(--radius-lg) var(--radius-lg);
+}
+.ckc-dots { display: inline-flex; gap: 4px; align-items: center; }
+.ckc-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); animation: ckc-blink 1.2s infinite both; }
+.ckc-dots span:nth-child(2) { animation-delay: 0.18s; }
+.ckc-dots span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes ckc-blink { 0%, 60%, 100% { opacity: 0.25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
+.ckc-foot { display: flex; align-items: flex-end; gap: 9px; padding: 12px 14px; border-top: 1px solid var(--border-subtle); }
+.ckc-input { flex: 1; resize: none; min-height: 22px; max-height: 120px; line-height: 1.5; font-size: 14px; padding: 9px 12px; }
+.ckc-send {
+  flex: none; width: 40px; height: 40px; border-radius: var(--radius-md); border: none; cursor: pointer;
+  display: grid; place-items: center; background: var(--accent); color: var(--ink-900);
+  transition: filter var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
+}
+.ckc-send:hover:not(:disabled) { filter: brightness(1.08); }
+.ckc-send:disabled { opacity: 0.4; cursor: default; }
+.ckc-prompts { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 16px; }
+.ckc-chip {
+  font-family: var(--font-sans); font-size: 12.5px; color: var(--text-secondary); cursor: pointer;
+  background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-pill); padding: 6px 12px;
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.ckc-chip:hover { border-color: var(--accent); color: var(--text-primary); background: var(--bg-card-raised); }
+
 /* ---------- Button ---------------------------------------- */
 .ck-btn {
   --_bg: var(--accent);
@@ -687,6 +735,19 @@ code, kbd, samp, pre { font-family: var(--font-mono); }
   box-shadow: 0 0 0 4px var(--_bg), 0 4px 14px rgba(0,0,0,0.5);
 }
 .ck-tl__pin:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.ck-tl__deathmark {
+  position: absolute; top: 0; transform: translate(-50%, -50%); width: 22px; height: 22px;
+  border-radius: 50%; display: grid; place-items: center; z-index: 3; pointer-events: none;
+  background: var(--loss-soft); border: 1.5px solid var(--loss); color: var(--loss);
+  box-shadow: 0 0 0 4px var(--bg-card);
+  animation: ck-tl-markpulse 1.4s var(--ease-out) infinite;
+}
+.ck-tl__deathmark svg { width: 13px; height: 13px; stroke-width: 2; }
+@keyframes ck-tl-markpulse {
+  0%, 100% { box-shadow: 0 0 0 4px var(--bg-card), 0 0 0 6px transparent; }
+  50% { box-shadow: 0 0 0 4px var(--bg-card), 0 0 0 8px rgba(255,87,101,0.28); }
+}
+@media (prefers-reduced-motion: reduce) { .ck-tl__deathmark { animation: none; } }
 .ck-tl__tip {
   position: absolute; transform: translateX(-50%); bottom: calc(100% + 12px); width: 220px; z-index: 5;
   background: var(--bg-card-raised); border: 1px solid var(--border-strong);

@@ -19,6 +19,10 @@ interface MatchTimelineProps {
   subtitle?: string
   unit?: string
   className?: string
+  /** Minutes-into-game of an externally-highlighted moment (e.g. a death hovered
+   * in the death map). Draws a guide line + skull marker and activates the
+   * nearest event pin so the two views stay in sync. */
+  markerTime?: number | null
 }
 
 function parseMin(d: string | number): number {
@@ -34,7 +38,7 @@ function fmtPin(t: number): string {
 export function MatchTimeline({
   duration, curve = [], events = [],
   title = 'Game timeline', subtitle, unit = 'k',
-  className = '',
+  className = '', markerTime = null,
 }: MatchTimelineProps) {
   const [active, setActive] = useState<number | null>(null)
   const endMin = parseMin(duration) || (curve.length - 1)
@@ -64,6 +68,20 @@ export function MatchTimeline({
     ` L${W},${zeroY} Z`
   const peakIdx = curve.indexOf(dmaxRaw)
   const troughIdx = curve.indexOf(dminRaw)
+
+  // External highlight (a death hovered in the death map): find the event pin
+  // nearest its time, within ~0.75 min, so we can light it up alongside the guide.
+  const markerInRange = markerTime != null && markerTime >= 0 && markerTime <= endMin
+  let nearestIdx = -1
+  if (markerInRange) {
+    let best = 0.75
+    events.forEach((e, i) => {
+      const d = Math.abs(e.t - (markerTime as number))
+      if (d <= best) { best = d; nearestIdx = i }
+    })
+  }
+  // Hover wins; otherwise the external marker drives which pin reads as active.
+  const activeIdx = active != null ? active : nearestIdx
 
   const ticks: number[] = []
   const step = endMin > 24 ? 5 : endMin > 12 ? 3 : 2
@@ -117,6 +135,11 @@ export function MatchTimeline({
           <polyline points={linePts} fill="none" stroke="var(--data-behind)" strokeWidth="2.5"
             clipPath="url(#ck-tl-bot)" vectorEffect="non-scaling-stroke"
             strokeLinejoin="round" strokeLinecap="round" />
+          {markerInRange && (
+            <line x1={((markerTime as number) / endMin) * W} y1="0" x2={((markerTime as number) / endMin) * W} y2={H}
+              stroke="var(--loss)" strokeWidth="1.5" strokeDasharray="4 3"
+              vectorEffect="non-scaling-stroke" />
+          )}
         </svg>
 
         {[{ i: peakIdx, v: dmaxRaw, c: 'var(--win)' }, { i: troughIdx, v: dminRaw, c: 'var(--loss)' }]
@@ -132,6 +155,12 @@ export function MatchTimeline({
             }}>{fmt(p.v)}</span>
           ))}
 
+        {markerInRange && (
+          <span className="ck-tl__deathmark" style={{ left: `${((markerTime as number) / endMin) * 100}%` }}>
+            <Icon name="skull" size={13} strokeWidth={2} />
+          </span>
+        )}
+
         {events.map((e, i) => {
           const k = KIND[e.kind] ?? KIND.teamfight
           const v = valueAt(e.t)
@@ -139,7 +168,7 @@ export function MatchTimeline({
             <button
               key={i}
               className="ck-tl__pin"
-              data-active={String(active === i)}
+              data-active={String(activeIdx === i)}
               style={{
                 left: `${(e.t / endMin) * 100}%`,
                 top: `${(yFor(v) / H) * 100}%`,
@@ -151,7 +180,7 @@ export function MatchTimeline({
               aria-label={`${e.label} at ${fmtPin(e.t)}`}
             >
               <Icon name={k.icon} size={14} strokeWidth={2} />
-              {active === i && (
+              {activeIdx === i && (
                 <span className="ck-tl__tip" style={{ left: '50%' }}>
                   <span className="ck-tl__tiptime">{fmtPin(e.t)} · {fmt(v)}</span>
                   <div className="ck-tl__tiplabel" style={{ color: k.c }}>{e.label}</div>
@@ -179,7 +208,7 @@ export function MatchTimeline({
               <button
                 key={i}
                 className="ck-tl__chip"
-                data-active={String(active === i)}
+                data-active={String(activeIdx === i)}
                 style={{ '--_c': k.c, '--_bd': k.bd, '--_bg': k.bg } as React.CSSProperties}
                 onMouseEnter={() => setActive(i)}
                 onMouseLeave={() => setActive(a => (a === i ? null : a))}

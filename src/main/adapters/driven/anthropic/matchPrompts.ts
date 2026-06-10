@@ -2,7 +2,9 @@ import type {
   ReviewOutput, ReviewClaim, EvidenceRef, BenchmarkBasis,
   FramingOutput, NarrationOutput, HighlightNarration, DeathNarration, TurningPoint
 } from '@shared/types'
-import type { ReviewExtras, TasksExtras, TaskProposal } from '../../../application/ports/MatchCoachingModel'
+import type {
+  ReviewExtras, TasksExtras, TaskProposal, ReflectionExtras, ReflectionProposal
+} from '../../../application/ports/MatchCoachingModel'
 import type { GeneratedTask } from '../../../domain/report/focusTask'
 import { isComputable } from '../../../domain/report/metricRegistry'
 
@@ -437,10 +439,9 @@ Now call submit_tasks with the standing set (1–3) and any ids to retire.`
   return { system: TASKS_SYSTEM, user }
 }
 
-export function parseTasks(input: unknown): TaskProposal {
-  if (!input || typeof input !== 'object') throw new Error('Tasks model returned no payload')
-  const o = input as Record<string, unknown>
-
+// Coerce a raw `set`/`retire` payload into a TaskProposal, dropping any task that
+// isn't well-formed and computable. Shared by pass 4 and the reflection finalize.
+function parseTaskProposal(o: Record<string, unknown>): TaskProposal {
   const set: GeneratedTask[] = []
   for (const raw of Array.isArray(o.set) ? o.set : []) {
     const r = raw as Record<string, unknown>
@@ -464,7 +465,122 @@ export function parseTasks(input: unknown): TaskProposal {
       ...(role ? { role } : {})
     })
   }
-
   const retire = (Array.isArray(o.retire) ? o.retire : []).filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
   return { set: set.slice(0, 3), retire }
+}
+
+export function parseTasks(input: unknown): TaskProposal {
+  if (!input || typeof input !== 'object') throw new Error('Tasks model returned no payload')
+  return parseTaskProposal(input as Record<string, unknown>)
+}
+
+// ── Coaching chat + session reflection (spec 004) ────────────────────────────
+// The chat is conversational (plain text), grounded in a per-game briefing the
+// orchestrator supplies as the first user turn. The persona lives here; the facts
+// come in via the briefing so this stays catalog-free and testable.
+
+export const COACH_CHAT_SYSTEM = `You are Corky, a sharp but warm League of Legends coach talking 1:1 with the player right after a ranked game. The first message gives you the facts of THIS game and what the player is working on — coach off those facts, never generalities.
+
+Style:
+- Conversational and concise: 2 to 4 sentences per reply, like a real coach. Never an essay.
+- Ask one focused question at a time and help them reach their own conclusions rather than lecturing.
+- Reference the real facts of this game. Never invent a number, a death, or a moment that isn't in the brief.
+- Plain text only — no markdown, no headers, no bullet lists, no emoji.
+- Honest about limits. If the data can't settle something, say so.`
+
+/** The chat transcript as Anthropic-shaped turns, briefing first. The renderer
+ * persists the transcript; this just renders it for the API call. */
+export function buildChatMessages(
+  briefing: string,
+  history: { role: 'user' | 'assistant'; text: string }[]
+): { role: 'user' | 'assistant'; content: string }[] {
+  return [
+    { role: 'user', content: briefing },
+    ...history.map((h) => ({ role: h.role, content: h.text }))
+  ]
+}
+
+const SUBMIT_REFLECTION = {
+  name: 'submit_reflection',
+  description:
+    "Write the player's post-game reflection from the conversation, and optionally adjust their standing focus tasks if the talk warrants it.",
+  input_schema: {
+    type: 'object' as const,
+    additionalProperties: false,
+    required: ['reflection', 'set', 'retire'],
+    properties: {
+      reflection: {
+        type: 'string',
+        description:
+          "The reflection in the PLAYER'S first-person voice, as if they wrote it in their journal — 2 to 4 short sentences drawn from what THEY said: what they're taking away, and the one or two things they'll do differently. Plain text, no headers, no quotation marks."
+      },
+      set: {
+        type: 'array',
+        maxItems: 3,
+        description:
+          'ONLY brand-new focus tasks to ADD from this conversation — leave empty if nothing new came up. The current standing tasks are kept automatically; do NOT re-list them here. To remove a current task, put its id in "retire". Each new task uses a computable metric.',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['description', 'metric', 'comparator', 'target', 'scope'],
+          properties: {
+            description: { type: 'string', description: 'A concrete, checkable next-game task.' },
+            metric: { type: 'string', description: 'One of the provided computable metric keys.' },
+            comparator: { type: 'string', enum: ['>=', '<=', '==', '>', '<'] },
+            target: { type: 'number' },
+            scope: { type: 'string', enum: ['champion', 'role', 'universal'] },
+            champion: { type: 'string' },
+            role: { type: 'string' }
+          }
+        }
+      },
+      retire: { type: 'array', items: { type: 'string' }, description: 'Ids of standing tasks to retire.' }
+    }
+  }
+}
+
+export { SUBMIT_REFLECTION }
+
+const REFLECTION_SYSTEM = `You are Corky, closing out a coaching session with the player. You have just talked through their game together. Call submit_reflection.
+
+Two jobs:
+1. Write the player's reflection in THEIR first-person voice, drawn from what THEY said in the conversation — not your verdict. 2 to 4 short sentences: what they're taking away and the one or two things they'll do differently next game. Plain text only.
+2. Optionally adjust their focus tasks. The current standing tasks are KEPT automatically — you never need to re-list them. Only use "set" to ADD a brand-new task the conversation clearly surfaced, and "retire" to drop a current task by id. In most sessions you change nothing: return an EMPTY "set" and an EMPTY "retire".
+
+Hard rules:
+- The reflection is the PLAYER'S voice and their conclusions — never put words in their mouth or invent a number.
+- Do NOT re-list existing tasks in "set" — that's only for new ones. Leaving "set" empty does NOT remove anything.
+- Every new task's "metric" MUST be one of the computable metric keys listed. Do not invent a metric.
+- Prefer stability: only add or retire a task the conversation actually justifies.`
+
+export function buildReflectionPrompt(
+  briefing: string,
+  history: { role: 'user' | 'assistant'; text: string }[],
+  extras: ReflectionExtras
+): { system: string; messages: { role: 'user' | 'assistant'; content: string }[] } {
+  const standing = extras.standing.length
+    ? extras.standing
+        .map((t) => `  - [${t.id}] ${t.description} (${t.metric} ${t.comparator} ${t.target}, ${t.scope})`)
+        .join('\n')
+    : '  (none yet)'
+  const goal = extras.goal ? `\nThe player is working on: ${extras.goal}` : ''
+  const closing = `We're done talking. Now write my reflection from what I said, and keep my focus tasks current.
+
+Computable metric keys: ${extras.catalogMetricKeys.join(', ')}
+Current standing focus tasks:
+${standing}${goal}
+
+Call submit_reflection.`
+  return {
+    system: REFLECTION_SYSTEM,
+    messages: buildChatMessages(briefing, history).concat({ role: 'user', content: closing })
+  }
+}
+
+export function parseReflection(input: unknown): ReflectionProposal {
+  if (!input || typeof input !== 'object') throw new Error('Reflection model returned no payload')
+  const o = input as Record<string, unknown>
+  const reflection = nonEmpty(o.reflection)
+  if (!reflection) throw new Error('Reflection model returned no reflection text')
+  return { reflection, tasks: parseTaskProposal(o) }
 }

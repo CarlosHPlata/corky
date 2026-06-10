@@ -1,19 +1,23 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { FramingOutput, NarrationOutput, ReviewOutput } from '@shared/types'
+import type { FramingOutput, NarrationOutput, ReviewOutput, ChatTurn } from '@shared/types'
 import type {
-  MatchCoachingModel, ReviewExtras, TasksExtras, TaskProposal
+  MatchCoachingModel, ReviewExtras, TasksExtras, TaskProposal,
+  ReflectionExtras, ReflectionProposal
 } from '../../../application/ports/MatchCoachingModel'
 import {
   SUBMIT_REVIEW, buildReviewPrompt, parseReview,
   SUBMIT_FRAMING, buildFramingPrompt, parseFraming,
   SUBMIT_NARRATION, buildNarrationPrompt, parseNarration,
-  SUBMIT_TASKS, buildTasksPrompt, parseTasks
+  SUBMIT_TASKS, buildTasksPrompt, parseTasks,
+  COACH_CHAT_SYSTEM, buildChatMessages,
+  SUBMIT_REFLECTION, buildReflectionPrompt, parseReflection
 } from './matchPrompts'
 
 interface ContentBlock {
   type: string
   name?: string
   input?: unknown
+  text?: string
 }
 
 /** Minimal slice of the Anthropic client we depend on — keeps the adapter testable. */
@@ -81,5 +85,43 @@ export class AnthropicMatchCoachingModel implements MatchCoachingModel {
   async analyzeTasks(ctx: string, extras: TasksExtras, model: string): Promise<TaskProposal> {
     const { system, user } = buildTasksPrompt(ctx, extras)
     return parseTasks(await this.callTool(system, user, SUBMIT_TASKS, model, 1200))
+  }
+
+  async chat(briefing: string, history: ChatTurn[], model: string): Promise<string> {
+    const message = await this.createMessage({
+      model,
+      max_tokens: 400,
+      system: COACH_CHAT_SYSTEM,
+      messages: buildChatMessages(briefing, history)
+    })
+    const text = message.content
+      .filter((c) => c.type === 'text' && typeof c.text === 'string')
+      .map((c) => c.text as string)
+      .join('')
+      .trim()
+    if (!text) throw new Error('Match coach returned an empty reply')
+    return text
+  }
+
+  async summarizeReflection(
+    briefing: string,
+    history: ChatTurn[],
+    extras: ReflectionExtras,
+    model: string
+  ): Promise<ReflectionProposal> {
+    const { system, messages } = buildReflectionPrompt(briefing, history, extras)
+    const message = await this.createMessage({
+      model,
+      max_tokens: 900,
+      system,
+      messages,
+      tools: [SUBMIT_REFLECTION],
+      tool_choice: { type: 'tool', name: SUBMIT_REFLECTION.name }
+    })
+    const block = message.content.find((c) => c.type === 'tool_use' && c.name === SUBMIT_REFLECTION.name)
+    if (!block || block.input == null) {
+      throw new Error('Match coach did not return a submit_reflection payload')
+    }
+    return parseReflection(block.input)
   }
 }

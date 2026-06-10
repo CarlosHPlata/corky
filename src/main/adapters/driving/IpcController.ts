@@ -10,7 +10,10 @@ import type { GetLpHistory } from '../../application/queries/GetLpHistory'
 import type { GetCoachReport } from '../../application/queries/GetCoachReport'
 import type { AnalyzeMatch } from '../../application/commands/AnalyzeMatch'
 import type { GetMatchAnalysis } from '../../application/queries/GetMatchAnalysis'
-import type { AnalyzeMatchOptions } from '@shared/types'
+import type { CoachChat } from '../../application/commands/CoachChat'
+import type { FinalizeReflection } from '../../application/commands/FinalizeReflection'
+import type { GetStandingTasks } from '../../application/queries/GetStandingTasks'
+import type { AnalyzeMatchOptions, ChatTurn } from '@shared/types'
 import type { GetSessionAnalysis } from '../../application/queries/GetSessionAnalysis'
 import type { AnalyzeSession } from '../../application/commands/AnalyzeSession'
 import type { GetSessionGoal } from '../../application/queries/GetSessionGoal'
@@ -28,6 +31,9 @@ export function registerIpcHandlers(deps: {
   getCoachReport: GetCoachReport
   analyzeMatch: AnalyzeMatch
   getMatchAnalysis: GetMatchAnalysis
+  coachChat: CoachChat
+  finalizeReflection: FinalizeReflection
+  getStandingTasks: GetStandingTasks
   getSessionAnalysis: GetSessionAnalysis
   analyzeSession: AnalyzeSession
   getSessionGoal: GetSessionGoal
@@ -71,6 +77,18 @@ export function registerIpcHandlers(deps: {
 
   ipcMain.handle('analysis:match:get', (_event, matchId: string) => {
     return deps.getMatchAnalysis.execute(matchId)
+  })
+
+  ipcMain.handle('coach:chat', (_event, matchId: string, messages: ChatTurn[]) => {
+    return deps.coachChat.execute(matchId, messages)
+  })
+
+  ipcMain.handle('coach:reflection:finalize', (_event, matchId: string, messages: ChatTurn[]) => {
+    return deps.finalizeReflection.execute(matchId, messages)
+  })
+
+  ipcMain.handle('tasks:standing:get', () => {
+    return deps.getStandingTasks.execute()
   })
 
   ipcMain.handle('analysis:session:get', () => {

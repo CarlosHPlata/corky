@@ -23,6 +23,9 @@ import { GetSessionAnalysis } from '../application/queries/GetSessionAnalysis'
 import { AnalyzeSession } from '../application/commands/AnalyzeSession'
 import { AnalyzeMatch } from '../application/commands/AnalyzeMatch'
 import { GetMatchAnalysis } from '../application/queries/GetMatchAnalysis'
+import { CoachChat } from '../application/commands/CoachChat'
+import { FinalizeReflection } from '../application/commands/FinalizeReflection'
+import { GetStandingTasks } from '../application/queries/GetStandingTasks'
 import { GetSessionGoal } from '../application/queries/GetSessionGoal'
 import { SaveSessionGoal } from '../application/commands/SaveSessionGoal'
 
@@ -84,6 +87,26 @@ export function buildContainer() {
     config.anthropicHeavyModel
   )
   const getMatchAnalysis = new GetMatchAnalysis(reportRepo)
+  // Post-game coaching chat runs entirely on the LIGHT tier — both the per-turn
+  // replies AND the finalize step (write the reflection + lightly adjust focus
+  // tasks). The chat is conversational and frequent, so it must stay cheap/fast;
+  // never put it on the heavy model. (The heavy tier is reserved for the one-shot
+  // match analysis passes, not the chat.)
+  const coachChat = new CoachChat(
+    matchRepo,
+    reportRepo,
+    sessionGoalRepo,
+    matchCoachingModel,
+    config.anthropicLightModel
+  )
+  const finalizeReflection = new FinalizeReflection(
+    matchRepo,
+    reportRepo,
+    sessionGoalRepo,
+    matchCoachingModel,
+    config.anthropicLightModel
+  )
+  const getStandingTasks = new GetStandingTasks(matchRepo, reportRepo)
   const getSessionAnalysis = new GetSessionAnalysis(matchRepo, sessionAnalysisRepo)
   const getSessionGoal = new GetSessionGoal(sessionGoalRepo)
   const saveSessionGoal = new SaveSessionGoal(sessionGoalRepo)
@@ -108,6 +131,9 @@ export function buildContainer() {
     getCoachReport,
     analyzeMatch,
     getMatchAnalysis,
+    coachChat,
+    finalizeReflection,
+    getStandingTasks,
     analyzeSession,
     getSessionAnalysis,
     getSessionGoal,
