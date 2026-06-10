@@ -8,6 +8,7 @@ import { SqliteSessionGoalRepository } from '../adapters/driven/sqlite/SqliteSes
 import { RiotApiClient } from '../adapters/driven/riot/RiotApiClient'
 import { AnthropicCoachingModel } from '../adapters/driven/anthropic/AnthropicCoachingModel'
 import { AnthropicSessionCoachingModel } from '../adapters/driven/anthropic/AnthropicSessionCoachingModel'
+import { AnthropicMatchCoachingModel } from '../adapters/driven/anthropic/AnthropicMatchCoachingModel'
 import { OpggMcpClient } from '../adapters/driven/opgg/OpggMcpClient'
 import { OpggBenchmarkDataSource } from '../adapters/driven/opgg/OpggBenchmarkDataSource'
 import { SyncRecentMatches } from '../application/commands/SyncRecentMatches'
@@ -20,6 +21,8 @@ import { GetLpHistory } from '../application/queries/GetLpHistory'
 import { GetCoachReport } from '../application/queries/GetCoachReport'
 import { GetSessionAnalysis } from '../application/queries/GetSessionAnalysis'
 import { AnalyzeSession } from '../application/commands/AnalyzeSession'
+import { AnalyzeMatch } from '../application/commands/AnalyzeMatch'
+import { GetMatchAnalysis } from '../application/queries/GetMatchAnalysis'
 import { GetSessionGoal } from '../application/queries/GetSessionGoal'
 import { SaveSessionGoal } from '../application/commands/SaveSessionGoal'
 
@@ -34,6 +37,7 @@ export function buildContainer() {
   const riotClient = new RiotApiClient(config.riotApiKey)
   const coachingModel = new AnthropicCoachingModel(config.anthropicApiKey)
   const sessionCoachingModel = AnthropicSessionCoachingModel.fromApiKey(config.anthropicApiKey)
+  const matchCoachingModel = AnthropicMatchCoachingModel.fromApiKey(config.anthropicApiKey)
   // Single shared OP.GG client (reusable across future features) + this feature's
   // narrow benchmark adapter over it.
   const opggClient = new OpggMcpClient()
@@ -69,6 +73,17 @@ export function buildContainer() {
     benchmarkSource,
     sessionGoalRepo
   )
+  const analyzeMatch = new AnalyzeMatch(
+    matchRepo,
+    summonerRepo,
+    reportRepo,
+    matchCoachingModel,
+    benchmarkSource,
+    sessionGoalRepo,
+    config.anthropicLightModel,
+    config.anthropicHeavyModel
+  )
+  const getMatchAnalysis = new GetMatchAnalysis(reportRepo)
   const getSessionAnalysis = new GetSessionAnalysis(matchRepo, sessionAnalysisRepo)
   const getSessionGoal = new GetSessionGoal(sessionGoalRepo)
   const saveSessionGoal = new SaveSessionGoal(sessionGoalRepo)
@@ -91,6 +106,8 @@ export function buildContainer() {
     getSummonerProfile,
     getLpHistory,
     getCoachReport,
+    analyzeMatch,
+    getMatchAnalysis,
     analyzeSession,
     getSessionAnalysis,
     getSessionGoal,
