@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { VerdictCard } from '../components/coaching/VerdictCard'
 import { FocusTask } from '../components/coaching/FocusTask'
 import { TurningPoint } from '../components/coaching/TurningPoint'
@@ -9,6 +9,7 @@ import { StatBlock } from '../components/core/StatBlock'
 import { Button } from '../components/core/Button'
 import { ChampAvatar } from '../components/ChampAvatar'
 import { CoachChat } from '../components/CoachChat'
+import { Askable, AskBadge, type AddRef } from '../components/coaching/AskRef'
 import { Icon } from '../components/Icon'
 import { useMatchReport } from '../data/useMatchReport'
 import { useMatchAnalysis } from '../data/useMatchAnalysis'
@@ -16,6 +17,7 @@ import { formatDuration, queueLabel } from '../utils/format'
 import type {
   MatchReport, MatchCore, Matchup as MatchupData, Breakdown as BreakdownData,
   GoldTimeline, DeathMap as DeathMapData, Highlight, RosterEntry, DeathNarration,
+  EvidenceRef,
 } from '@shared/types'
 
 // Corky desktop — Post-game report.
@@ -80,14 +82,20 @@ function GatedBlock({ title, hint, analyzing, onAnalyze }: { title: string; hint
   )
 }
 
+// A stat anchor ref, minted with the exact key + label grammar of the main-side
+// anchorCatalog (`stat:<key>`), so chat grounding resolves it 1:1.
+function statRef(key: string, label: string): EvidenceRef {
+  return { id: `stat:${key}`, kind: 'stat', label }
+}
+
 // ── FACTUAL: scoreline economy (US2) ─────────────────────────────────────────
-function Scoreline({ core }: { core: MatchCore }) {
+function Scoreline({ core, onAsk }: { core: MatchCore; onAsk?: AddRef }) {
   const stats = [
-    { label: 'KDA', value: core.kdaRatio.toFixed(2), caption: `${core.kills} / ${core.deaths} / ${core.assists}` },
-    { label: 'CS', value: String(core.cs), caption: `${core.role.toLowerCase()} farm` },
-    { label: 'CS / min', value: core.csPerMin.toFixed(1), caption: 'minions + jungle' },
-    { label: 'Gold', value: goldK(core.gold), caption: 'earned total' },
-    { label: 'Gold / min', value: String(core.goldPerMin), caption: 'economy rate' },
+    { label: 'KDA', value: core.kdaRatio.toFixed(2), caption: `${core.kills} / ${core.deaths} / ${core.assists}`, ref: statRef('kda', 'KDA ratio') },
+    { label: 'CS', value: String(core.cs), caption: `${core.role.toLowerCase()} farm`, ref: statRef('cs', 'CS') },
+    { label: 'CS / min', value: core.csPerMin.toFixed(1), caption: 'minions + jungle', ref: statRef('cs_per_min', 'CS per minute') },
+    { label: 'Gold', value: goldK(core.gold), caption: 'earned total', ref: statRef('gold', 'Total gold') },
+    { label: 'Gold / min', value: String(core.goldPerMin), caption: 'economy rate', ref: statRef('gold_per_min', 'Gold per minute') },
   ]
   return (
     <Card padding={0}>
@@ -107,7 +115,11 @@ function Scoreline({ core }: { core: MatchCore }) {
           </div>
         </div>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 22, padding: '16px 22px', borderLeft: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
-          {stats.map((s, i) => <StatBlock key={i} size="sm" {...s} />)}
+          {stats.map(({ ref, ...s }, i) => (
+            <Askable key={i} evidence={ref} onAsk={onAsk}>
+              <StatBlock size="sm" {...s} />
+            </Askable>
+          ))}
         </div>
       </div>
     </Card>
@@ -181,21 +193,25 @@ function nr(v: number | null, fmt: (n: number) => string): string {
   return v == null ? '—' : fmt(v)
 }
 
-function Breakdown({ b }: { b: BreakdownData }) {
-  const stats: { label: string; value: string; caption: string; unit?: string }[] = [
-    { label: 'CS @ 10', value: nr(b.csAt10, String), caption: 'minions at 10:00' },
-    { label: 'CS / min', value: b.csPerMin.toFixed(1), caption: 'full game' },
-    { label: 'Gold @ 14', value: nr(b.goldAt14, goldDiffK), caption: 'vs lane opponent' },
-    { label: 'Gold @ 24', value: nr(b.goldAt24, goldDiffK), caption: 'vs lane opponent' },
-    { label: 'Vision', value: String(b.visionScore), caption: 'vision score' },
-    { label: 'Solo deaths', value: String(b.soloDeaths), caption: 'died alone' },
-    { label: 'Kill part.', value: Math.round(b.killParticipation * 100) + '%', caption: 'of team kills' },
+function Breakdown({ b, onAsk }: { b: BreakdownData; onAsk?: AddRef }) {
+  const stats: { label: string; value: string; caption: string; unit?: string; ref: EvidenceRef }[] = [
+    { label: 'CS @ 10', value: nr(b.csAt10, String), caption: 'minions at 10:00', ref: statRef('cs_at_10', 'CS at 10:00') },
+    { label: 'CS / min', value: b.csPerMin.toFixed(1), caption: 'full game', ref: statRef('cs_per_min', 'CS per minute') },
+    { label: 'Gold @ 14', value: nr(b.goldAt14, goldDiffK), caption: 'vs lane opponent', ref: statRef('gold_at_14', 'Gold diff at 14:00') },
+    { label: 'Gold @ 24', value: nr(b.goldAt24, goldDiffK), caption: 'vs lane opponent', ref: statRef('gold_at_24', 'Gold diff at 24:00') },
+    { label: 'Vision', value: String(b.visionScore), caption: 'vision score', ref: statRef('vision_score', 'Vision score') },
+    { label: 'Solo deaths', value: String(b.soloDeaths), caption: 'died alone', ref: statRef('solo_deaths', 'Solo deaths') },
+    { label: 'Kill part.', value: Math.round(b.killParticipation * 100) + '%', caption: 'of team kills', ref: statRef('kill_participation', 'Kill participation') },
   ]
   return (
     <Card padding={16}>
       <div className="eyebrow" style={{ fontSize: 11, marginBottom: 14 }}>Breakdown</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '18px 14px' }}>
-        {stats.map((s, i) => <StatBlock key={i} size="sm" {...s} />)}
+        {stats.map(({ ref, ...s }, i) => (
+          <Askable key={i} evidence={ref} onAsk={onAsk}>
+            <StatBlock size="sm" {...s} />
+          </Askable>
+        ))}
       </div>
     </Card>
   )
@@ -222,8 +238,14 @@ function deathNarrationByN(narrations?: DeathNarration[]): Map<number, DeathNarr
   return m
 }
 
-function DeathMap({ dm, narrations, onActiveDeath }: {
-  dm: DeathMapData; narrations?: DeathNarration[]; onActiveDeath?: (tMin: number | null) => void
+// The ref for one player death — same id grammar the anchorCatalog mints
+// (`marker:death#<n>`, 1-based n straight off the death-map dot).
+function deathRef(n: number): EvidenceRef {
+  return { id: `marker:death#${n}`, kind: 'marker', label: `Death ${n}` }
+}
+
+function DeathMap({ dm, narrations, onActiveDeath, onAsk }: {
+  dm: DeathMapData; narrations?: DeathNarration[]; onActiveDeath?: (tMin: number | null) => void; onAsk?: AddRef
 }) {
   const byN = deathNarrationByN(narrations)
   const hasNarr = byN.size > 0
@@ -261,6 +283,8 @@ function DeathMap({ dm, narrations, onActiveDeath }: {
                 <span key={d.n} className="ck-minimap__death"
                   onClick={hasNarr ? () => setSel(d.n) : undefined}
                   onMouseEnter={() => setHover(d.n)} onMouseLeave={() => setHover(h => (h === d.n ? null : h))}
+                  onContextMenu={onAsk ? (e) => { e.preventDefault(); onAsk(deathRef(d.n)) } : undefined}
+                  title={onAsk ? 'Right-click to ask Corky about this death' : undefined}
                   style={{ left: d.xPct + '%', top: d.yPct + '%', background: 'var(--loss)', cursor: 'pointer', outline: activeN === d.n ? '2px solid var(--gold-400)' : 'none' }}>
                   {d.n}
                 </span>
@@ -273,6 +297,9 @@ function DeathMap({ dm, narrations, onActiveDeath }: {
                 const hoverProps = {
                   onMouseEnter: () => setHover(d.n),
                   onMouseLeave: () => setHover(h => (h === d.n ? null : h)),
+                  onContextMenu: onAsk
+                    ? (e: React.MouseEvent) => { e.preventDefault(); onAsk(deathRef(d.n)) }
+                    : undefined,
                 }
                 const row = (
                   <>
@@ -281,6 +308,10 @@ function DeathMap({ dm, narrations, onActiveDeath }: {
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: narr ? DEATH_CHARACTER[narr.character].tone : 'var(--text-faint)' }}>
                       {narr ? DEATH_CHARACTER[narr.character].label : `death ${d.n} of ${dm.count}`}
                     </span>
+                    {onAsk && (
+                      <AskBadge evidence={deathRef(d.n)} onAsk={onAsk} visible={isActive}
+                        style={{ marginLeft: 'auto' }} />
+                    )}
                   </>
                 )
                 return narr ? (
@@ -319,9 +350,19 @@ function DeathMap({ dm, narrations, onActiveDeath }: {
   )
 }
 
-// Map a factual highlight to the timeline component's event vocabulary.
+// Map a factual highlight to the timeline component's event vocabulary, minting
+// each event's evidence anchor with the EXACT id grammar of the main-side
+// anchorCatalog: highlights numbered per bucket in report order, death-kind
+// highlights counted in the "swing" bucket (`marker:objective#1`,
+// `marker:teamfight#2`, `marker:swing#1`, …).
 function toTimelineEvents(hl: Highlight[]) {
-  return hl.map(h => ({ t: h.tMin, kind: h.kind, label: h.label, detail: h.detail }))
+  const counters: Record<string, number> = {}
+  return hl.map(h => {
+    const bucket = h.kind === 'death' ? 'swing' : h.kind
+    const n = (counters[bucket] = (counters[bucket] ?? 0) + 1)
+    const ref: EvidenceRef = { id: `marker:${bucket}#${n}`, kind: 'marker', label: h.label }
+    return { t: h.tMin, kind: h.kind, label: h.label, detail: h.detail, ref }
+  })
 }
 
 function UnavailableNote({ what }: { what: string }) {
@@ -426,6 +467,29 @@ export function CoachReport({ matchId, onAnalyzed }: {
   // in the death map, so the timeline marks the same moment.
   const [activeDeathTime, setActiveDeathTime] = useState<number | null>(null)
 
+  // Pending chat references — evidence the player picked off the report ("ask
+  // Corky about this"). Lifted here so every report element can add, while the
+  // chat composer renders/removes/sends them. Capped at 5 (the main-side
+  // grounding cap); duplicate ids are no-ops. A ref mirror keeps `addRef` able
+  // to report whether the add actually landed (drives the ✓-flash feedback).
+  const [pendingRefs, setPendingRefs] = useState<EvidenceRef[]>([])
+  const pendingMirror = useRef<EvidenceRef[]>([])
+  const setPending = useCallback((next: EvidenceRef[]) => {
+    pendingMirror.current = next
+    setPendingRefs(next)
+  }, [])
+  useEffect(() => { pendingMirror.current = []; setPendingRefs([]) }, [matchId])
+  const addRef = useCallback((ref: EvidenceRef): boolean => {
+    const cur = pendingMirror.current
+    if (cur.length >= 5 || cur.some(r => r.id === ref.id)) return false
+    setPending(cur.concat({ ...ref }))
+    return true
+  }, [setPending])
+  const removeRef = useCallback((id: string) => {
+    setPending(pendingMirror.current.filter(r => r.id !== id))
+  }, [setPending])
+  const clearRefs = useCallback(() => { setPending([]) }, [setPending])
+
   // Pin / save the game.
   const [pinned, setPinned] = useState(() => loadPins().includes(matchId))
   useEffect(() => { setPinned(loadPins().includes(matchId)) }, [matchId])
@@ -489,7 +553,7 @@ export function CoachReport({ matchId, onAnalyzed }: {
       {/* Scoreline — facts; MVP caption is a framing decoration (pass 1). */}
       <section>
         <SectionLabel icon="bar-chart-3">This game</SectionLabel>
-        <Scoreline core={core} />
+        <Scoreline core={core} onAsk={addRef} />
         {framing?.mvp && (
           <div style={{ marginTop: 8, fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--text-muted)' }}>
             <Icon name="sparkles" size={13} style={{ color: 'var(--gold-400)', verticalAlign: 'middle', marginRight: 6 }} />
@@ -530,20 +594,24 @@ export function CoachReport({ matchId, onAnalyzed }: {
               curve={report.timeline.frames.map(f => f.goldDiff / 1000)}
               events={toTimelineEvents(report.timeline.highlights)}
               markerTime={activeDeathTime}
+              onAskEvent={addRef}
             />
           </div>
         ) : (
           <div style={{ marginBottom: 14 }}><UnavailableNote what="The game timeline" /></div>
         )}
         <div style={{ marginBottom: 14 }}>
-          <Breakdown b={report.breakdown} />
+          <Breakdown b={report.breakdown} onAsk={addRef} />
         </div>
         {report.deathMap
-          ? <DeathMap dm={report.deathMap} narrations={narration?.deathNarrations} onActiveDeath={setActiveDeathTime} />
+          ? <DeathMap dm={report.deathMap} narrations={narration?.deathNarrations} onActiveDeath={setActiveDeathTime} onAsk={addRef} />
           : <UnavailableNote what="The death map" />}
       </section>
 
-      {/* Turning points — AI read, gated */}
+      {/* Turning points — AI read, gated. NOT chat-referenceable: they're model
+          output with no entry in the main-side anchor catalog (which only mints
+          ids for stats, spec-003 highlights and deaths), so any id minted here
+          would ground as "not found". Point at the timeline marker instead. */}
       <section>
         <SectionLabel icon="map" count={narration ? `${narration.turningPoints.length} moments` : undefined}>Turning points</SectionLabel>
         {narration
@@ -637,7 +705,8 @@ export function CoachReport({ matchId, onAnalyzed }: {
       {analyzed && (
         <section>
           <SectionLabel icon="message-circle">Coach Corky</SectionLabel>
-          <CoachChat matchId={matchId} core={core} review={review} onTasksUpdated={apply} />
+          <CoachChat matchId={matchId} core={core} review={review} onTasksUpdated={apply}
+            pendingRefs={pendingRefs} onRemoveRef={removeRef} onClearRefs={clearRefs} />
         </section>
       )}
     </div>

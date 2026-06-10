@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   parseReview, parseFraming, parseNarration, parseTasks, parseReflection,
-  buildReflectionPrompt, SUBMIT_REFLECTION
+  buildReflectionPrompt, SUBMIT_REFLECTION,
+  parseDiscoveryPlan, buildDiscoveryPrompt, SUBMIT_PLAN
 } from '../../src/main/adapters/driven/anthropic/matchPrompts'
 import {
   AnthropicMatchCoachingModel,
@@ -238,6 +239,90 @@ describe('buildReflectionPrompt', () => {
   it('renders a MEMORY none line when the store is empty', () => {
     const { messages } = buildReflectionPrompt('BRIEFING', [], baseExtras)
     expect(messages.at(-1)?.content).toContain('MEMORY none')
+  })
+})
+
+describe('parseDiscoveryPlan', () => {
+  it('accepts a well-formed payload and keeps the memory query', () => {
+    const out = parseDiscoveryPlan({
+      requests: [{ kind: 'memory', query: 'river deaths' }, { kind: 'history' }, { kind: 'benchmark' }]
+    })
+    expect(out.requests).toEqual([
+      { kind: 'memory', query: 'river deaths' },
+      { kind: 'history' },
+      { kind: 'benchmark' }
+    ])
+  })
+
+  it('drops unknown kinds and malformed entries', () => {
+    const out = parseDiscoveryPlan({
+      requests: [{ kind: 'wiki' }, 'not an object', null, { query: 'no kind' }, { kind: 'history' }]
+    })
+    expect(out.requests).toEqual([{ kind: 'history' }])
+  })
+
+  it('strips the query from non-memory kinds (only memory takes a hint)', () => {
+    const out = parseDiscoveryPlan({ requests: [{ kind: 'history', query: 'x' }, { kind: 'memory', query: '  ' }] })
+    expect(out.requests).toEqual([{ kind: 'history' }, { kind: 'memory' }])
+  })
+
+  it('dedupes by kind+query', () => {
+    const out = parseDiscoveryPlan({
+      requests: [
+        { kind: 'memory', query: 'a' }, { kind: 'memory', query: 'a' }, { kind: 'memory', query: 'b' },
+        { kind: 'history' }, { kind: 'history' }
+      ]
+    })
+    expect(out.requests).toEqual([
+      { kind: 'memory', query: 'a' },
+      { kind: 'memory', query: 'b' },
+      { kind: 'history' }
+    ])
+  })
+
+  it('caps at five requests and never throws on garbage', () => {
+    const many = Array.from({ length: 8 }, (_, i) => ({ kind: 'memory', query: `q${i}` }))
+    expect(parseDiscoveryPlan({ requests: many }).requests).toHaveLength(5)
+    expect(parseDiscoveryPlan(null).requests).toEqual([])
+    expect(parseDiscoveryPlan({ requests: 'lol' }).requests).toEqual([])
+  })
+
+  it('declares the kind enum and the 5-request ceiling in the tool schema', () => {
+    expect(SUBMIT_PLAN.input_schema.required).toEqual(['requests'])
+    const requests = SUBMIT_PLAN.input_schema.properties.requests as {
+      maxItems: number
+      items: { properties: { kind: { enum: string[] } } }
+    }
+    expect(requests.maxItems).toBe(5)
+    expect(requests.items.properties.kind.enum).toEqual(['memory', 'history', 'benchmark'])
+  })
+})
+
+describe('AnthropicMatchCoachingModel.planDiscovery', () => {
+  it('forces the submit_plan tool on a small budget and returns the parsed plan', async () => {
+    const create: CreateMessage = vi.fn().mockResolvedValue({
+      content: [{ type: 'tool_use', name: 'submit_plan', input: { requests: [{ kind: 'history' }] } }]
+    })
+    const model = new AnthropicMatchCoachingModel(create)
+    const out = await model.planDiscovery(
+      'do I always lose this matchup?',
+      'INVENTORY memory=3 history=12 benchmark=available tasks=2',
+      'claude-haiku-4-5'
+    )
+    expect(out.requests).toEqual([{ kind: 'history' }])
+    const params = (create as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    expect(params.tool_choice).toEqual({ type: 'tool', name: 'submit_plan' })
+    expect(params.max_tokens).toBe(300)
+    expect(params.model).toBe('claude-haiku-4-5')
+    expect(params.messages[0].content).toContain('INVENTORY memory=3 history=12 benchmark=available tasks=2')
+    expect(params.messages[0].content).toContain('do I always lose this matchup?')
+  })
+
+  it('builds the user prompt inventory-first, question after', () => {
+    const { user, system } = buildDiscoveryPrompt('was that cs ok?', 'INVENTORY memory=0 history=4 benchmark=off tasks=1')
+    expect(user.startsWith('INVENTORY memory=0 history=4 benchmark=off tasks=1')).toBe(true)
+    expect(user).toContain('Player question: was that cs ok?')
+    expect(system).toContain('data scout')
   })
 })
 

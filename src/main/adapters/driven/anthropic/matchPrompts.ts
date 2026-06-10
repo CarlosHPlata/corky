@@ -3,7 +3,8 @@ import type {
   FramingOutput, NarrationOutput, HighlightNarration, DeathNarration, TurningPoint
 } from '@shared/types'
 import type {
-  ReviewExtras, TasksExtras, TaskProposal, ReflectionExtras, ReflectionProposal
+  ReviewExtras, TasksExtras, TaskProposal, ReflectionExtras, ReflectionProposal,
+  DiscoveryPlan, DiscoveryRequest
 } from '../../../application/ports/MatchCoachingModel'
 import type { GeneratedTask } from '../../../domain/report/focusTask'
 import type { ProposedSemanticObject } from '../../../domain/memory/semanticObject'
@@ -487,6 +488,7 @@ Style:
 - Conversational and concise: 2 to 4 sentences per reply, like a real coach. Never an essay.
 - Ask one focused question at a time and help them reach their own conclusions rather than lecturing.
 - Reference the real facts of this game. Never invent a number, a death, or a moment that isn't in the brief.
+- When the brief includes a DOSSIER section (data fetched for this question), ground your reply in it and cite its facts plainly.
 - Plain text only — no markdown, no headers, no bullet lists, no emoji.
 - Honest about limits. If the data can't settle something, say so.`
 
@@ -500,6 +502,75 @@ export function buildChatMessages(
     { role: 'user', content: briefing },
     ...history.map((h) => ({ role: h.role, content: h.text }))
   ]
+}
+
+// ── Chat discovery: the data scout (spec 004 / A5) ───────────────────────────
+// A bounded planning call before the chat reply: given the player's question and
+// a one-line inventory, the LIGHT model requests only the fetches that would
+// materially improve the answer. The command executes them; the model never
+// fetches anything itself (Constitution II).
+
+const DISCOVERY_KINDS = new Set(['memory', 'history', 'benchmark'])
+const MAX_DISCOVERY_REQUESTS = 5
+
+export const SUBMIT_PLAN = {
+  name: 'submit_plan',
+  description:
+    "Request the data fetches that would materially improve the coach's answer to the player's question. An empty list is a good answer when the briefing already covers it.",
+  input_schema: {
+    type: 'object' as const,
+    additionalProperties: false,
+    required: ['requests'],
+    properties: {
+      requests: {
+        type: 'array',
+        maxItems: 5,
+        description: 'The fetches worth making — at most 5, usually 0 or 1.',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['kind'],
+          properties: {
+            kind: { type: 'string', enum: ['memory', 'history', 'benchmark'] },
+            query: { type: 'string', description: 'Short free-text search hint — only meaningful for kind "memory".' }
+          }
+        }
+      }
+    }
+  }
+}
+
+const DISCOVERY_SYSTEM = `You are the data scout for a League of Legends coach answering ONE player question. Call submit_plan.
+
+You get the question and an INVENTORY line of what is available: "memory" (durable coaching facts about this player; takes an optional free-text query), "history" (the player's own past games as a comparison cohort), "benchmark" (the public meta reference for this champion/role). Request ONLY what would materially improve the answer — an empty list is a good answer for questions the per-game briefing already covers. Never request a source the inventory shows as empty or off.`
+
+export function buildDiscoveryPrompt(question: string, inventory: string): { system: string; user: string } {
+  return {
+    system: DISCOVERY_SYSTEM,
+    user: `${inventory}\n\nPlayer question: ${question}\n\nNow call submit_plan with the fetches worth making (empty is fine).`
+  }
+}
+
+/** Coerce the forced-tool payload into a DiscoveryPlan. Defensive, never throws
+ * (a broken plan just means no dossier): unknown kinds are dropped, duplicates
+ * (same kind+query) collapse, the list is capped at 5. */
+export function parseDiscoveryPlan(input: unknown): DiscoveryPlan {
+  const o = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
+  const requests: DiscoveryRequest[] = []
+  const seen = new Set<string>()
+  for (const raw of Array.isArray(o.requests) ? o.requests : []) {
+    if (requests.length >= MAX_DISCOVERY_REQUESTS) break
+    if (!raw || typeof raw !== 'object') continue
+    const r = raw as Record<string, unknown>
+    const kind = typeof r.kind === 'string' ? r.kind : ''
+    if (!DISCOVERY_KINDS.has(kind)) continue
+    const query = kind === 'memory' ? (nonEmpty(r.query) ?? undefined) : undefined
+    const key = `${kind}|${query ?? ''}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    requests.push({ kind: kind as DiscoveryRequest['kind'], ...(query ? { query } : {}) })
+  }
+  return { requests }
 }
 
 const MEMORY_KINDS = ['observation', 'pattern', 'strength', 'weakness', 'reflection', 'milestone']

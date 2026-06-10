@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { FramingOutput, NarrationOutput, ReviewOutput, ChatTurn } from '@shared/types'
 import type {
   MatchCoachingModel, ReviewExtras, TasksExtras, TaskProposal,
-  ReflectionExtras, ReflectionProposal
+  ReflectionExtras, ReflectionProposal, DiscoveryPlan
 } from '../../../application/ports/MatchCoachingModel'
 import {
   SUBMIT_REVIEW, buildReviewPrompt, parseReview,
@@ -10,6 +10,7 @@ import {
   SUBMIT_NARRATION, buildNarrationPrompt, parseNarration,
   SUBMIT_TASKS, buildTasksPrompt, parseTasks,
   COACH_CHAT_SYSTEM, buildChatMessages,
+  SUBMIT_PLAN, buildDiscoveryPrompt, parseDiscoveryPlan,
   SUBMIT_REFLECTION, buildReflectionPrompt, parseReflection
 } from './matchPrompts'
 
@@ -101,6 +102,12 @@ export class AnthropicMatchCoachingModel implements MatchCoachingModel {
       .trim()
     if (!text) throw new Error('Match coach returned an empty reply')
     return text
+  }
+
+  async planDiscovery(question: string, inventory: string, model: string): Promise<DiscoveryPlan> {
+    const { system, user } = buildDiscoveryPrompt(question, inventory)
+    // A tiny planning call — the payload is at most 5 short request objects.
+    return parseDiscoveryPlan(await this.callTool(system, user, SUBMIT_PLAN, model, 300))
   }
 
   async summarizeReflection(

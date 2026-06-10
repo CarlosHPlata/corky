@@ -1,28 +1,57 @@
 import { describe, it, expect, vi } from 'vitest'
 import { CoachChat } from '../../src/main/application/commands/CoachChat'
-import type { MatchCoachingModel } from '../../src/main/application/ports/MatchCoachingModel'
+import type { MatchCoachingModel, DiscoveryPlan } from '../../src/main/application/ports/MatchCoachingModel'
+import type { GetHistoryAggregates } from '../../src/main/application/queries/GetHistoryAggregates'
 import type { ChatTurn } from '../../src/shared/types'
+import type { CoachingConfigOverrides } from '../../src/shared/config'
 import { loadMatch, loadTimeline, PLAYER_PUUID } from '../fixtures/load'
 
-function fakeModel(reply: string) {
+function fakeModel(reply: string, plan: DiscoveryPlan | Error = { requests: [] }) {
   const chat = vi.fn().mockResolvedValue(reply)
+  const planDiscovery =
+    plan instanceof Error ? vi.fn().mockRejectedValue(plan) : vi.fn().mockResolvedValue(plan)
   const model = {
     analyzeFraming: vi.fn(), analyzeNarration: vi.fn(), analyzeReview: vi.fn(), analyzeTasks: vi.fn(),
     chat,
+    planDiscovery,
     summarizeReflection: vi.fn()
   } as unknown as MatchCoachingModel
-  return { model, chat }
+  return { model, chat, planDiscovery }
 }
 
-function deps(model: MatchCoachingModel) {
+const MEMORY_ROW = {
+  id: 'm1', kind: 'pattern', champion: 'ahri', statement: 'Dies solo in river 14-20min.',
+  evidenceMatchIds: ['OLD_1'], occurrences: 3, firstSeen: 1, lastSeen: 2, status: 'active'
+}
+
+const HISTORY_AGG = {
+  basis: 'champion', preferredWins: true, games: 7, wins: 5, winRate: 0.71,
+  averages: { cs_at_10: 78.5 }
+}
+
+const BENCHMARK_REF = { basis: 'champion_patch', csPerMin: 6.8, deathsCeiling: 5, patch: '14.10' }
+
+function deps(
+  model: MatchCoachingModel,
+  opts: { overrides?: CoachingConfigOverrides } = {}
+) {
   const matchRepo = {
     getCurrentAccount: () => ({ puuid: PLAYER_PUUID, gameName: 'P', tagLine: 'EUW', platform: 'euw1', region: 'europe' }),
     getMatchDetail: () => ({ matchId: 'WIN_001', rawJson: JSON.stringify(loadMatch('WIN_001')) }),
-    getTimeline: () => ({ matchId: 'WIN_001', rawJson: JSON.stringify(loadTimeline('WIN_001')) })
+    getTimeline: () => ({ matchId: 'WIN_001', rawJson: JSON.stringify(loadTimeline('WIN_001')) }),
+    countMatches: () => 12
   } as never
-  const reportRepo = { getMatchAnalysis: () => null } as never
+  const reportRepo = { getMatchAnalysis: () => null, getStandingTasks: () => [] } as never
   const goalRepo = { get: () => null } as never
-  return new CoachChat(matchRepo, reportRepo, goalRepo, model, 'haiku')
+  const semanticMemory = { upsert: vi.fn(), query: () => [MEMORY_ROW], setStatus: vi.fn() } as never
+  const getHistoryAggregates = { execute: () => HISTORY_AGG } as unknown as GetHistoryAggregates
+  const benchmarkSource = { getChampionBenchmark: vi.fn().mockResolvedValue(BENCHMARK_REF) } as never
+  const coachingConfigRepo = { get: () => opts.overrides ?? null, save: vi.fn(), clear: vi.fn() } as never
+  return new CoachChat(
+    matchRepo, reportRepo, goalRepo,
+    semanticMemory, getHistoryAggregates, benchmarkSource, coachingConfigRepo,
+    model, 'haiku'
+  )
 }
 
 describe('CoachChat', () => {
@@ -66,5 +95,77 @@ describe('CoachChat', () => {
     const cmd = deps(model)
     const out = await cmd.execute('WIN_001', [{ role: 'user', text: 'hi' }])
     expect(out).toEqual({ reply: 'Look at the map before you push.' })
+  })
+
+  it('appends no dossier when the planner requests nothing', async () => {
+    const { model, chat, planDiscovery } = fakeModel('ok', { requests: [] })
+    await deps(model).execute('WIN_001', [{ role: 'user', text: 'was my cs fine?' }])
+
+    expect(planDiscovery).toHaveBeenCalledTimes(1)
+    // Question = the latest user turn; inventory = the cheap local counts.
+    expect(planDiscovery.mock.calls[0][0]).toBe('was my cs fine?')
+    expect(planDiscovery.mock.calls[0][1]).toBe('INVENTORY memory=1 history=12 benchmark=available tasks=0')
+    expect(planDiscovery.mock.calls[0][2]).toBe('haiku')
+    const briefing = chat.mock.calls[0][0] as string
+    expect(briefing).not.toContain('DOSSIER')
+  })
+
+  it('honors memory+history+benchmark requests and appends their dossier lines', async () => {
+    const { model, chat } = fakeModel('ok', {
+      requests: [{ kind: 'memory', query: 'river deaths' }, { kind: 'history' }, { kind: 'benchmark' }]
+    })
+    await deps(model).execute('WIN_001', [{ role: 'user', text: 'do I always die in river?' }])
+
+    const briefing = chat.mock.calls[0][0] as string
+    expect(briefing).toContain('\n\nDOSSIER (fetched for this question)\n')
+    expect(briefing).toContain('MEM kind=pattern champ=ahri x3 "Dies solo in river 14-20min."')
+    expect(briefing).toMatch(/HIST basis=champion champ=\S+ wins_only=true games=7 wr=71% cs_at_10=78\.5/)
+    expect(briefing).toContain('BENCH cs_per_min basis=champion_patch ref=6.8 patch=14.10')
+  })
+
+  it('ignores a memory request when the local-som source is disabled', async () => {
+    const { model, chat } = fakeModel('ok', {
+      requests: [{ kind: 'memory', query: 'river' }, { kind: 'history' }]
+    })
+    const cmd = deps(model, { overrides: { version: 1, sources: { 'local-som': false } } })
+    await cmd.execute('WIN_001', [{ role: 'user', text: 'do I always die in river?' }])
+
+    const briefing = chat.mock.calls[0][0] as string
+    expect(briefing).toContain('DOSSIER')
+    expect(briefing).toContain('HIST basis=champion')
+    expect(briefing).not.toContain('MEM ')
+  })
+
+  it('honors at most 3 requests on the standard tier', async () => {
+    const { model, chat } = fakeModel('ok', {
+      requests: [
+        { kind: 'memory', query: 'a' }, { kind: 'memory', query: 'b' }, { kind: 'memory', query: 'c' },
+        { kind: 'history' }, { kind: 'benchmark' }
+      ]
+    })
+    await deps(model).execute('WIN_001', [{ role: 'user', text: 'q' }])
+
+    const briefing = chat.mock.calls[0][0] as string
+    expect(briefing).toContain('MEM ')
+    expect(briefing).not.toContain('HIST ')
+    expect(briefing).not.toContain('BENCH ')
+  })
+
+  it('skips discovery entirely on the eco tier', async () => {
+    const { model, chat, planDiscovery } = fakeModel('ok', { requests: [{ kind: 'history' }] })
+    const cmd = deps(model, { overrides: { version: 1, budgetTier: 'eco' } })
+    const out = await cmd.execute('WIN_001', [{ role: 'user', text: 'q' }])
+
+    expect(planDiscovery).not.toHaveBeenCalled()
+    expect(chat.mock.calls[0][0] as string).not.toContain('DOSSIER')
+    expect(out).toEqual({ reply: 'ok' })
+  })
+
+  it('still answers when the planner throws — no dossier, chat untouched', async () => {
+    const { model, chat } = fakeModel('still here', new Error('planner down'))
+    const out = await deps(model).execute('WIN_001', [{ role: 'user', text: 'q' }])
+
+    expect(out).toEqual({ reply: 'still here' })
+    expect(chat.mock.calls[0][0] as string).not.toContain('DOSSIER')
   })
 })

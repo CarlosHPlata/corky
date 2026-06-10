@@ -4,7 +4,8 @@ import { Button } from './core/Button'
 import { Badge } from './core/Badge'
 import { ChampAvatar } from './ChampAvatar'
 import { Icon } from './Icon'
-import type { MatchCore, ReviewOutput, MatchAnalysis, ChatTurn } from '@shared/types'
+import { EvidenceChip } from './coaching/EvidenceChip'
+import type { MatchCore, ReviewOutput, MatchAnalysis, ChatTurn, EvidenceRef } from '@shared/types'
 
 // Corky desktop — post-game coaching CHAT (spec 004).
 //
@@ -67,11 +68,28 @@ function buildOpener(core: MatchCore, review: ReviewOutput | null): string {
 const STARTERS_LOSS = ['I thought I could get a pick', "I didn't realise I was that far up", 'Where did I lose the lead?', 'What should I have done differently?']
 const STARTERS_WIN = ['What made this one work?', 'Was anything just luck?', 'How do I repeat this?']
 
-export function CoachChat({ matchId, core, review, onTasksUpdated }: {
+// Chip tone for an evidence ref, mirroring how the report colours its anchors.
+function refChipKind(r: EvidenceRef): 'data' | 'death' | 'objective' {
+  if (r.id.startsWith('marker:death') || r.id.startsWith('marker:swing')) return 'death'
+  if (r.id.startsWith('marker:objective')) return 'objective'
+  return 'data'
+}
+// Readable chip text (same fallback grammar the report uses for claim chips).
+function refChipLabel(r: EvidenceRef): string {
+  return r.label ?? r.id.replace(/^(stat|marker):/, '').replace(/[_#]/g, ' ').trim()
+}
+
+export function CoachChat({ matchId, core, review, onTasksUpdated, pendingRefs, onRemoveRef, onClearRefs }: {
   matchId: string
   core: MatchCore
   review: ReviewOutput | null
   onTasksUpdated?: (analysis: MatchAnalysis) => void
+  /** Evidence the player picked off the report, waiting to ride the next message.
+   * Owned by the report screen (every report element can add); rendered, removed
+   * and consumed here. */
+  pendingRefs?: EvidenceRef[]
+  onRemoveRef?: (id: string) => void
+  onClearRefs?: () => void
 }) {
   const chatKey = 'ck-chat-' + matchId
   const reflectKey = 'ck-postreflect-' + matchId
@@ -102,7 +120,11 @@ export function CoachChat({ matchId, core, review, onTasksUpdated }: {
   async function send(textArg?: string): Promise<void> {
     const text = (textArg != null ? textArg : draft).trim()
     if (!text || thinking) return
-    const next = msgs.concat({ role: 'user', text })
+    // Attach the pending report references to this turn (the main process grounds
+    // them against the anchor catalog), then clear them — they've been spent.
+    const refs = pendingRefs && pendingRefs.length > 0 ? pendingRefs.slice(0, 5) : undefined
+    const next = msgs.concat(refs ? { role: 'user', text, refs } : { role: 'user', text })
+    if (refs) onClearRefs?.()
     setMsgs(next); setDraft(''); setThinking(true)
     try {
       const { reply } = await window.api.coachChat(matchId, next)
@@ -200,7 +222,19 @@ export function CoachChat({ matchId, core, review, onTasksUpdated }: {
             {x.role === 'assistant'
               ? <span className="ckc-ava"><Icon name="sparkles" size={15} /></span>
               : <ChampAvatar name={core.champion} size="xs" shape="circle" ring="accent" style={{ marginTop: 1 }} />}
-            <div className={'ckc-bubble ' + (x.role === 'user' ? 'ckc-bubble--me' : 'ckc-bubble--corky')}>{x.text}</div>
+            <div className={'ckc-bubble ' + (x.role === 'user' ? 'ckc-bubble--me' : 'ckc-bubble--corky')}>
+              {x.refs && x.refs.length > 0 && (
+                <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+                  {x.refs.map((r) => (
+                    <EvidenceChip key={r.id} kind={refChipKind(r)} refId={r.id} truncate title={r.id}
+                      style={{ fontSize: 10.5, padding: '1px 6px' }}>
+                      {refChipLabel(r)}
+                    </EvidenceChip>
+                  ))}
+                </span>
+              )}
+              {x.text}
+            </div>
           </div>
         ))}
         {thinking && (
@@ -220,7 +254,27 @@ export function CoachChat({ matchId, core, review, onTasksUpdated }: {
         </div>
       )}
 
-      <div className="ckc-foot">
+      {/* Pending report references — picked off the timeline / death map / stat
+          tiles, riding the next message. Click a chip to drop it. */}
+      {pendingRefs && pendingRefs.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6,
+          padding: '10px 14px 0', borderTop: '1px solid var(--border-subtle)' }}>
+          <span className="eyebrow" style={{ fontSize: 10, color: 'var(--text-faint)', marginRight: 2 }}>Asking about</span>
+          {pendingRefs.map((r) => (
+            <EvidenceChip key={r.id} kind={refChipKind(r)} refId={r.id} truncate
+              title={`${r.id} — click to remove`}
+              icon={<Icon name="message-circle" size={12} strokeWidth={2} />}
+              onClick={() => onRemoveRef?.(r.id)}>
+              {refChipLabel(r)} ×
+            </EvidenceChip>
+          ))}
+          <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)' }}>
+            {pendingRefs.length}/5
+          </span>
+        </div>
+      )}
+
+      <div className="ckc-foot" style={pendingRefs && pendingRefs.length > 0 ? { borderTop: 'none', paddingTop: 8 } : undefined}>
         <textarea className="ck-field ckc-input" value={draft} onChange={autosize} onKeyDown={onKey} rows={1}
           placeholder="Tell Corky what you were thinking…" disabled={thinking} />
         <button type="button" className="ckc-send" onClick={() => send()} disabled={!draft.trim() || thinking} aria-label="Send">

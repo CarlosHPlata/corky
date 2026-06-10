@@ -20,6 +20,7 @@ import { GetMatchReport } from '../application/queries/GetMatchReport'
 import { GetSummonerProfile } from '../application/queries/GetSummonerProfile'
 import { GetLpHistory } from '../application/queries/GetLpHistory'
 import { GetCoachReport } from '../application/queries/GetCoachReport'
+import { GetHistoryAggregates } from '../application/queries/GetHistoryAggregates'
 import { GetSessionAnalysis } from '../application/queries/GetSessionAnalysis'
 import { AnalyzeSession } from '../application/commands/AnalyzeSession'
 import { AnalyzeMatch } from '../application/commands/AnalyzeMatch'
@@ -74,6 +75,7 @@ export function buildContainer() {
   const getSummonerProfile = new GetSummonerProfile(matchRepo, summonerRepo)
   const getLpHistory = new GetLpHistory(matchRepo, summonerRepo)
   const getCoachReport = new GetCoachReport(reportRepo)
+  const getHistoryAggregates = new GetHistoryAggregates(matchRepo)
   const analyzeSession = new AnalyzeSession(
     matchRepo,
     summonerRepo,
@@ -103,6 +105,10 @@ export function buildContainer() {
     matchRepo,
     reportRepo,
     sessionGoalRepo,
+    semanticMemory,
+    getHistoryAggregates,
+    benchmarkSource,
+    coachingConfigRepo,
     matchCoachingModel,
     config.anthropicLightModel
   )
@@ -141,6 +147,7 @@ export function buildContainer() {
     getSummonerProfile,
     getLpHistory,
     getCoachReport,
+    getHistoryAggregates,
     analyzeMatch,
     getMatchAnalysis,
     coachChat,

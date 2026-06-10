@@ -73,6 +73,20 @@ export interface ReflectionProposal {
   memory: ProposedSemanticObject[]
 }
 
+/** One data fetch the discovery planner asks for before a chat reply. `query`
+ * is a free-text FTS hint, only meaningful for kind 'memory' — history and
+ * benchmark requests are parameterless (the command knows the match context). */
+export interface DiscoveryRequest {
+  kind: 'memory' | 'history' | 'benchmark'
+  query?: string
+}
+
+/** The planner's bounded answer: which fetches to make before replying (≤5).
+ * An empty list is the common case — the briefing already covers most questions. */
+export interface DiscoveryPlan {
+  requests: DiscoveryRequest[]
+}
+
 /**
  * Driven port for the per-match coach. One method per pass; each takes the
  * compact context string (never raw JSON) + typed extras and returns a validated
@@ -91,6 +105,13 @@ export interface MatchCoachingModel {
    * never invents numbers (Constitution II).
    */
   chat(briefing: string, history: ChatTurn[], model: string): Promise<string>
+  /**
+   * Plan the discovery step before a chat reply: given the player's question and
+   * a one-line inventory of the data available, decide which fetches would
+   * materially improve the answer (the data scout). Runs on the light tier; an
+   * empty plan is a good answer.
+   */
+  planDiscovery(question: string, inventory: string, model: string): Promise<DiscoveryPlan>
   /**
    * Finalise a session: write the player's reflection from the conversation and,
    * if the talk warrants it, adjust the standing focus tasks (computable metrics

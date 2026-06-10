@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
 import { Icon } from '../Icon'
+import { AskBadge, type AddRef } from './AskRef'
+import type { EvidenceRef } from '@shared/types'
 import type { EventKind, TimelineEvent } from '../../data/mockData'
 
 const KIND: Record<EventKind, { c: string; bg: string; bd: string; icon: string }> = {
@@ -11,10 +13,14 @@ const KIND: Record<EventKind, { c: string; bg: string; bd: string; icon: string 
   pick:      { c: 'var(--gold-400)',    bg: 'var(--accent-soft)',      bd: 'rgba(242,179,61,0.55)',   icon: 'crosshair' },
 }
 
+/** A timeline event optionally carrying its main-side evidence anchor, so the
+ * player can attach the moment to the coach chat ("ask Corky about this"). */
+export type RefTimelineEvent = TimelineEvent & { ref?: EvidenceRef }
+
 interface MatchTimelineProps {
   duration: string | number
   curve: number[]
-  events?: TimelineEvent[]
+  events?: RefTimelineEvent[]
   title?: string
   subtitle?: string
   unit?: string
@@ -23,6 +29,9 @@ interface MatchTimelineProps {
    * in the death map). Draws a guide line + skull marker and activates the
    * nearest event pin so the two views stay in sync. */
   markerTime?: number | null
+  /** When set, events carrying a `ref` become referenceable: a small ask badge
+   * shows on the active pin/chip, and right-click adds the ref directly. */
+  onAskEvent?: AddRef
 }
 
 function parseMin(d: string | number): number {
@@ -38,7 +47,7 @@ function fmtPin(t: number): string {
 export function MatchTimeline({
   duration, curve = [], events = [],
   title = 'Game timeline', subtitle, unit = 'k',
-  className = '', markerTime = null,
+  className = '', markerTime = null, onAskEvent,
 }: MatchTimelineProps) {
   const [active, setActive] = useState<number | null>(null)
   const endMin = parseMin(duration) || (curve.length - 1)
@@ -177,9 +186,16 @@ export function MatchTimeline({
               onMouseEnter={() => setActive(i)}
               onMouseLeave={() => setActive(a => (a === i ? null : a))}
               onFocus={() => setActive(i)}
+              onContextMenu={e.ref && onAskEvent
+                ? (ev) => { ev.preventDefault(); onAskEvent(e.ref as EvidenceRef) }
+                : undefined}
               aria-label={`${e.label} at ${fmtPin(e.t)}`}
             >
               <Icon name={k.icon} size={14} strokeWidth={2} />
+              {e.ref && onAskEvent && (
+                <AskBadge evidence={e.ref} onAsk={onAskEvent} visible={activeIdx === i} size={16}
+                  style={{ position: 'absolute', top: -9, right: -11, zIndex: 6, background: 'var(--bg-app)' }} />
+              )}
               {activeIdx === i && (
                 <span className="ck-tl__tip" style={{ left: '50%' }}>
                   <span className="ck-tl__tiptime">{fmtPin(e.t)} · {fmt(v)}</span>
@@ -214,12 +230,19 @@ export function MatchTimeline({
                 onMouseLeave={() => setActive(a => (a === i ? null : a))}
                 onFocus={() => setActive(i)}
                 onClick={() => setActive(i)}
+                onContextMenu={e.ref && onAskEvent
+                  ? (ev) => { ev.preventDefault(); onAskEvent(e.ref as EvidenceRef) }
+                  : undefined}
               >
                 <span className="ck-tl__chipdot">
                   <Icon name={k.icon} size={13} strokeWidth={2} />
                 </span>
                 <span className="ck-tl__chiptime">{fmtPin(e.t)}</span>
                 <span className="ck-tl__chiplabel">{e.label}</span>
+                {e.ref && onAskEvent && (
+                  <AskBadge evidence={e.ref} onAsk={onAskEvent} visible={activeIdx === i} size={16}
+                    style={{ marginLeft: 2 }} />
+                )}
               </button>
             )
           })}
