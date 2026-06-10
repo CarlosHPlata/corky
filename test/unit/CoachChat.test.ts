@@ -7,12 +7,14 @@ import type { CoachingConfigOverrides } from '../../src/shared/config'
 import { loadMatch, loadTimeline, PLAYER_PUUID } from '../fixtures/load'
 
 function fakeModel(reply: string, plan: DiscoveryPlan | Error = { requests: [] }) {
-  const chat = vi.fn().mockResolvedValue(reply)
+  // The command speaks chatAgentic since spec 005 — plain replies, no proposal.
+  const chat = vi.fn().mockResolvedValue({ reply })
   const planDiscovery =
     plan instanceof Error ? vi.fn().mockRejectedValue(plan) : vi.fn().mockResolvedValue(plan)
   const model = {
     analyzeFraming: vi.fn(), analyzeNarration: vi.fn(), analyzeReview: vi.fn(), analyzeTasks: vi.fn(),
-    chat,
+    chat: vi.fn(),
+    chatAgentic: chat,
     planDiscovery,
     summarizeReflection: vi.fn()
   } as unknown as MatchCoachingModel
@@ -47,18 +49,23 @@ function deps(
   const getHistoryAggregates = { execute: () => HISTORY_AGG } as unknown as GetHistoryAggregates
   const benchmarkSource = { getChampionBenchmark: vi.fn().mockResolvedValue(BENCHMARK_REF) } as never
   const coachingConfigRepo = { get: () => opts.overrides ?? null, save: vi.fn(), clear: vi.fn() } as never
+  const reflectionRepo = {
+    list: () => [], get: () => null, upsert: vi.fn(), delete: vi.fn(), countForMatch: () => 0
+  } as never
   return new CoachChat(
     matchRepo, reportRepo, goalRepo,
     semanticMemory, getHistoryAggregates, benchmarkSource, coachingConfigRepo,
-    model, 'haiku'
+    reflectionRepo, model, 'haiku'
   )
 }
+
+const SESSION = 'WIN_001-sess-test'
 
 describe('CoachChat', () => {
   it('grounds a turn with refs: REF lines prepended, blank line, then the original text', async () => {
     const { model, chat } = fakeModel('You were behind there.')
     const cmd = deps(model)
-    await cmd.execute('WIN_001', [
+    await cmd.execute('WIN_001', SESSION, [
       {
         role: 'user',
         text: 'why is my kda fine but we lost lane?',
@@ -81,7 +88,7 @@ describe('CoachChat', () => {
       { role: 'assistant', text: 'Walk me through your recall timing.' },
       { role: 'user', text: 'why this number?', refs: [{ id: 'stat:cs', kind: 'stat' }] }
     ]
-    await cmd.execute('WIN_001', messages)
+    await cmd.execute('WIN_001', SESSION, messages)
 
     const sent = chat.mock.calls[0][1] as ChatTurn[]
     expect(sent[0]).toBe(messages[0]) // ref-less turns pass through as-is
@@ -93,13 +100,13 @@ describe('CoachChat', () => {
   it('returns the model reply intact', async () => {
     const { model } = fakeModel('Look at the map before you push.')
     const cmd = deps(model)
-    const out = await cmd.execute('WIN_001', [{ role: 'user', text: 'hi' }])
+    const out = await cmd.execute('WIN_001', SESSION, [{ role: 'user', text: 'hi' }])
     expect(out).toEqual({ reply: 'Look at the map before you push.' })
   })
 
   it('appends no dossier when the planner requests nothing', async () => {
     const { model, chat, planDiscovery } = fakeModel('ok', { requests: [] })
-    await deps(model).execute('WIN_001', [{ role: 'user', text: 'was my cs fine?' }])
+    await deps(model).execute('WIN_001', SESSION, [{ role: 'user', text: 'was my cs fine?' }])
 
     expect(planDiscovery).toHaveBeenCalledTimes(1)
     // Question = the latest user turn; inventory = the cheap local counts.
@@ -114,7 +121,7 @@ describe('CoachChat', () => {
     const { model, chat } = fakeModel('ok', {
       requests: [{ kind: 'memory', query: 'river deaths' }, { kind: 'history' }, { kind: 'benchmark' }]
     })
-    await deps(model).execute('WIN_001', [{ role: 'user', text: 'do I always die in river?' }])
+    await deps(model).execute('WIN_001', SESSION, [{ role: 'user', text: 'do I always die in river?' }])
 
     const briefing = chat.mock.calls[0][0] as string
     expect(briefing).toContain('\n\nDOSSIER (fetched for this question)\n')
@@ -128,7 +135,7 @@ describe('CoachChat', () => {
       requests: [{ kind: 'memory', query: 'river' }, { kind: 'history' }]
     })
     const cmd = deps(model, { overrides: { version: 1, sources: { 'local-som': false } } })
-    await cmd.execute('WIN_001', [{ role: 'user', text: 'do I always die in river?' }])
+    await cmd.execute('WIN_001', SESSION, [{ role: 'user', text: 'do I always die in river?' }])
 
     const briefing = chat.mock.calls[0][0] as string
     expect(briefing).toContain('DOSSIER')
@@ -143,7 +150,7 @@ describe('CoachChat', () => {
         { kind: 'history' }, { kind: 'benchmark' }
       ]
     })
-    await deps(model).execute('WIN_001', [{ role: 'user', text: 'q' }])
+    await deps(model).execute('WIN_001', SESSION, [{ role: 'user', text: 'q' }])
 
     const briefing = chat.mock.calls[0][0] as string
     expect(briefing).toContain('MEM ')
@@ -154,7 +161,7 @@ describe('CoachChat', () => {
   it('skips discovery entirely on the eco tier', async () => {
     const { model, chat, planDiscovery } = fakeModel('ok', { requests: [{ kind: 'history' }] })
     const cmd = deps(model, { overrides: { version: 1, budgetTier: 'eco' } })
-    const out = await cmd.execute('WIN_001', [{ role: 'user', text: 'q' }])
+    const out = await cmd.execute('WIN_001', SESSION, [{ role: 'user', text: 'q' }])
 
     expect(planDiscovery).not.toHaveBeenCalled()
     expect(chat.mock.calls[0][0] as string).not.toContain('DOSSIER')
@@ -163,7 +170,7 @@ describe('CoachChat', () => {
 
   it('still answers when the planner throws — no dossier, chat untouched', async () => {
     const { model, chat } = fakeModel('still here', new Error('planner down'))
-    const out = await deps(model).execute('WIN_001', [{ role: 'user', text: 'q' }])
+    const out = await deps(model).execute('WIN_001', SESSION, [{ role: 'user', text: 'q' }])
 
     expect(out).toEqual({ reply: 'still here' })
     expect(chat.mock.calls[0][0] as string).not.toContain('DOSSIER')

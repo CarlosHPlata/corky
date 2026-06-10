@@ -2,8 +2,10 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   parseReview, parseFraming, parseNarration, parseTasks, parseReflection,
   buildReflectionPrompt, SUBMIT_REFLECTION,
-  parseDiscoveryPlan, buildDiscoveryPrompt, SUBMIT_PLAN
+  parseDiscoveryPlan, buildDiscoveryPrompt, SUBMIT_PLAN,
+  parseProposalPayload, renderAgenticContext, buildAgenticPrompt, PROPOSE_TOOLS
 } from '../../src/main/adapters/driven/anthropic/matchPrompts'
+import type { AgenticChatExtras } from '../../src/main/application/ports/MatchCoachingModel'
 import {
   AnthropicMatchCoachingModel,
   type CreateMessage
@@ -342,5 +344,189 @@ describe('AnthropicMatchCoachingModel.chat', () => {
     const create: CreateMessage = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: '' }] })
     const model = new AnthropicMatchCoachingModel(create)
     await expect(model.chat('B', [], 'm')).rejects.toThrow()
+  })
+})
+
+// ── Spec 005: propose-tool payload validators + agentic prompt ───────────────
+
+describe('parseProposalPayload', () => {
+  it('coerces a valid propose_update_tasks payload', () => {
+    const raw = parseProposalPayload('propose_update_tasks', {
+      set: [{ description: 'Hold 7 cs/min', metric: 'cs_per_min', comparator: '>=', target: 7, scope: 'universal' }],
+      retire: ['old-task']
+    })
+    expect(raw.kind).toBe('update_tasks')
+    if (raw.kind === 'update_tasks') {
+      expect(raw.set).toHaveLength(1)
+      expect(raw.retire).toEqual(['old-task'])
+    }
+  })
+
+  it('drops non-computable metrics and throws when nothing survives', () => {
+    expect(() =>
+      parseProposalPayload('propose_update_tasks', {
+        set: [{ description: 'x', metric: 'apm', comparator: '>=', target: 1, scope: 'universal' }],
+        retire: []
+      })
+    ).toThrow(/at least one valid task/)
+  })
+
+  it('retire-only payloads are valid', () => {
+    const raw = parseProposalPayload('propose_update_tasks', { set: [], retire: ['a'] })
+    if (raw.kind === 'update_tasks') expect(raw.retire).toEqual(['a'])
+  })
+
+  it('coerces create/update/delete reflection payloads', () => {
+    const create = parseProposalPayload('propose_create_reflection', { text: ' note ', refIds: ['marker:death#1', 7] })
+    expect(create).toEqual({ kind: 'create_reflection', text: 'note', refIds: ['marker:death#1'] })
+    const update = parseProposalPayload('propose_update_reflection', { reflectionId: 'r1', text: 'edited' })
+    expect(update).toEqual({ kind: 'update_reflection', text: 'edited', refIds: [], reflectionId: 'r1' })
+    const del = parseProposalPayload('propose_delete_reflection', { reflectionId: 'r1' })
+    expect(del).toEqual({ kind: 'delete_reflection', reflectionId: 'r1' })
+  })
+
+  it('throws fixable errors on malformed payloads', () => {
+    expect(() => parseProposalPayload('propose_create_reflection', { text: '  ' })).toThrow(/non-empty "text"/)
+    expect(() => parseProposalPayload('propose_update_reflection', { text: 'x' })).toThrow(/reflectionId/)
+    expect(() => parseProposalPayload('propose_delete_reflection', {})).toThrow(/reflectionId/)
+    expect(() => parseProposalPayload('made_up_tool', {})).toThrow(/Unknown proposal tool/)
+  })
+})
+
+describe('chatAgentic tool loop', () => {
+  const extras: AgenticChatExtras = {
+    standing: [],
+    catalogMetricKeys: ['cs_per_min'],
+    reflections: [],
+    hasPendingProposal: false
+  }
+  const VALID_TASKS_INPUT = {
+    set: [{ description: 'Hold 7 cs/min', metric: 'cs_per_min', comparator: '>=', target: 7, scope: 'universal' }],
+    retire: []
+  }
+  const text = (t: string): { type: string; text: string } => ({ type: 'text', text: t })
+  const toolUse = (name: string, input: unknown, id = 'tu1'): { type: string; id: string; name: string; input: unknown } =>
+    ({ type: 'tool_use', id, name, input })
+
+  it('plain reply: no tools called, one round', async () => {
+    const create: CreateMessage = vi.fn().mockResolvedValue({ content: [text('Just talking.')] })
+    const model = new AnthropicMatchCoachingModel(create)
+    const out = await model.chatAgentic('B', [], extras, 'm')
+    expect(out).toEqual({ reply: 'Just talking.' })
+    expect(create).toHaveBeenCalledTimes(1)
+  })
+
+  it('captures one valid proposal and continues to text', async () => {
+    const create: CreateMessage = vi.fn()
+      .mockResolvedValueOnce({ content: [text('Drafting that.'), toolUse('propose_update_tasks', VALID_TASKS_INPUT)] })
+      .mockResolvedValueOnce({ content: [text('Take a look at the card.')] })
+    const model = new AnthropicMatchCoachingModel(create)
+    const out = await model.chatAgentic('B', [], extras, 'm')
+    expect(out.rawProposal?.kind).toBe('update_tasks')
+    expect(out.reply).toContain('Take a look')
+    expect(create).toHaveBeenCalledTimes(2)
+  })
+
+  it('last valid proposal wins across rounds', async () => {
+    const second = { set: [{ description: 'Vision 30', metric: 'vision_score', comparator: '>=', target: 30, scope: 'universal' }], retire: [] }
+    const create: CreateMessage = vi.fn()
+      .mockResolvedValueOnce({ content: [toolUse('propose_update_tasks', VALID_TASKS_INPUT, 'a')] })
+      .mockResolvedValueOnce({ content: [toolUse('propose_update_tasks', second, 'b')] })
+      .mockResolvedValueOnce({ content: [text('Done.')] })
+    const model = new AnthropicMatchCoachingModel(create)
+    const out = await model.chatAgentic('B', [], extras, 'm')
+    if (out.rawProposal?.kind === 'update_tasks') {
+      expect(out.rawProposal.set[0].metric).toBe('vision_score')
+    } else {
+      throw new Error('expected a task proposal')
+    }
+  })
+
+  it('caps tool rounds at 3 then forces a text-only closer', async () => {
+    const create = vi.fn(async (params: Record<string, unknown>) => {
+      // keep tool-calling whenever tools are offered
+      if (params.tools) return { content: [toolUse('propose_update_tasks', VALID_TASKS_INPUT)] }
+      return { content: [text('Forced closer.')] }
+    }) as unknown as CreateMessage
+    const model = new AnthropicMatchCoachingModel(create)
+    const out = await model.chatAgentic('B', [], extras, 'm')
+    expect(out.reply).toBe('Forced closer.')
+    expect(create).toHaveBeenCalledTimes(4) // 3 tool rounds + forced text
+    const lastCall = (create as unknown as ReturnType<typeof vi.fn>).mock.calls[3][0] as Record<string, unknown>
+    expect(lastCall.tools).toBeUndefined()
+  })
+
+  it('feeds malformed payloads back as errors; no proposal escapes', async () => {
+    const create: CreateMessage = vi.fn()
+      .mockResolvedValueOnce({ content: [toolUse('propose_create_reflection', { text: '  ' })] })
+      .mockResolvedValueOnce({ content: [text('Could not draft it, but here is the advice.')] })
+    const model = new AnthropicMatchCoachingModel(create)
+    const out = await model.chatAgentic('B', [], extras, 'm')
+    expect(out.rawProposal).toBeUndefined()
+    expect(out.reply).toContain('advice')
+    const secondCall = (create as unknown as ReturnType<typeof vi.fn>).mock.calls[1][0] as { messages: { content: unknown }[] }
+    const lastMsg = secondCall.messages[secondCall.messages.length - 1].content as { is_error?: boolean }[]
+    expect(lastMsg[0].is_error).toBe(true)
+  })
+
+  it('refuses new proposals while one is pending', async () => {
+    const create: CreateMessage = vi.fn()
+      .mockResolvedValueOnce({ content: [toolUse('propose_update_tasks', VALID_TASKS_INPUT)] })
+      .mockResolvedValueOnce({ content: [text('Settle the open card first.')] })
+    const model = new AnthropicMatchCoachingModel(create)
+    const out = await model.chatAgentic('B', [], { ...extras, hasPendingProposal: true }, 'm')
+    expect(out.rawProposal).toBeUndefined()
+    expect(out.reply).toContain('Settle')
+  })
+
+  it('mid-loop failure degrades to the text already produced', async () => {
+    const create: CreateMessage = vi.fn()
+      .mockResolvedValueOnce({ content: [text('First thought.'), toolUse('propose_update_tasks', VALID_TASKS_INPUT)] })
+      .mockRejectedValueOnce(new Error('network'))
+    const model = new AnthropicMatchCoachingModel(create)
+    const out = await model.chatAgentic('B', [], extras, 'm')
+    expect(out.reply).toBe('First thought.')
+    expect(out.rawProposal?.kind).toBe('update_tasks')
+  })
+
+  it('failure before any content propagates', async () => {
+    const create: CreateMessage = vi.fn().mockRejectedValue(new Error('network'))
+    const model = new AnthropicMatchCoachingModel(create)
+    await expect(model.chatAgentic('B', [], extras, 'm')).rejects.toThrow('network')
+  })
+})
+
+describe('buildAgenticPrompt', () => {
+  const agentic: AgenticChatExtras = {
+    standing: [{
+      id: 't1', description: 'Vision 25+', metric: 'vision_score', comparator: '>=', target: 25,
+      scope: 'universal', status: 'active', sourceMatchId: 'M1'
+    }],
+    catalogMetricKeys: ['cs_per_min', 'vision_score'],
+    reflections: [{ id: 'r1', source: 'player', text: 'shove only with vision' }],
+    hasPendingProposal: false
+  }
+
+  it('renders task ids, metric keys and reflection ids into the context', () => {
+    const ctx = renderAgenticContext(agentic)
+    expect(ctx).toContain('TASK [t1]')
+    expect(ctx).toContain('cs_per_min, vision_score')
+    expect(ctx).toContain('REFL [r1] (player)')
+  })
+
+  it('flags a pending proposal so the model will not stack another', () => {
+    const ctx = renderAgenticContext({ ...agentic, hasPendingProposal: true })
+    expect(ctx).toContain('already awaiting')
+  })
+
+  it('briefing rides first, history after; four propose tools are exported', () => {
+    const { messages } = buildAgenticPrompt('BRIEF', [{ role: 'user', text: 'hi' }], agentic)
+    expect(messages[0].role).toBe('user')
+    expect(messages[0].content).toContain('BRIEF')
+    expect(messages[0].content).toContain('TASK [t1]')
+    expect(messages[1]).toEqual({ role: 'user', content: 'hi' })
+    expect(PROPOSE_TOOLS.map((t) => t.name)).toEqual([
+      'propose_update_tasks', 'propose_create_reflection', 'propose_update_reflection', 'propose_delete_reflection'
+    ])
   })
 })

@@ -36,6 +36,7 @@ import { GetChatTranscript } from '../application/queries/GetChatTranscript'
 import { SaveChatTranscript } from '../application/commands/SaveChatTranscript'
 import { GetChatSessions } from '../application/queries/GetChatSessions'
 import { SaveChatSession } from '../application/commands/SaveChatSession'
+import { ResolveProposal } from '../application/commands/ResolveProposal'
 import { GetSessionGoal } from '../application/queries/GetSessionGoal'
 import { SaveSessionGoal } from '../application/commands/SaveSessionGoal'
 import { SqliteCoachingConfigRepository } from '../adapters/driven/sqlite/SqliteCoachingConfigRepository'
@@ -128,8 +129,18 @@ export function buildContainer() {
     getHistoryAggregates,
     benchmarkSource,
     coachingConfigRepo,
+    reflectionRepo,
     matchCoachingModel,
     config.anthropicLightModel
+  )
+  // The ONLY write path for model-initiated changes (spec 005): accept applies,
+  // reject discards, staleness re-checked at accept time. The distillation hook
+  // arrives with US5 (SummarizeIntoReflection wave).
+  const resolveProposal = new ResolveProposal(
+    matchRepo,
+    reportRepo,
+    chatSessionRepo,
+    reflectionRepo
   )
   const finalizeReflection = new FinalizeReflection(
     matchRepo,
@@ -185,6 +196,7 @@ export function buildContainer() {
     reflectionRepo,
     getChatSessions,
     saveChatSession,
+    resolveProposal,
     analyzeSession,
     getSessionAnalysis,
     getSessionGoal,

@@ -2,8 +2,10 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { FramingOutput, NarrationOutput, ReviewOutput, ChatTurn } from '@shared/types'
 import type {
   MatchCoachingModel, ReviewExtras, TasksExtras, TaskProposal,
-  ReflectionExtras, ReflectionProposal, DiscoveryPlan
+  ReflectionExtras, ReflectionProposal, DiscoveryPlan,
+  AgenticChatExtras, AgenticChatResult
 } from '../../../application/ports/MatchCoachingModel'
+import type { RawProposal } from '../../../domain/chat/proposal'
 import {
   SUBMIT_REVIEW, buildReviewPrompt, parseReview,
   SUBMIT_FRAMING, buildFramingPrompt, parseFraming,
@@ -11,12 +13,14 @@ import {
   SUBMIT_TASKS, buildTasksPrompt, parseTasks,
   buildSystemPrompt, buildChatMessages,
   SUBMIT_PLAN, buildDiscoveryPrompt, parseDiscoveryPlan,
-  SUBMIT_REFLECTION, buildReflectionPrompt, parseReflection
+  SUBMIT_REFLECTION, buildReflectionPrompt, parseReflection,
+  PROPOSE_TOOLS, buildAgenticPrompt, parseProposalPayload
 } from './matchPrompts'
 import type { PromptId } from '../../../domain/config/promptRegistry'
 
 interface ContentBlock {
   type: string
+  id?: string
   name?: string
   input?: unknown
   text?: string
@@ -119,6 +123,90 @@ export class AnthropicMatchCoachingModel implements MatchCoachingModel {
       .trim()
     if (!text) throw new Error('Match coach returned an empty reply')
     return text
+  }
+
+  /**
+   * Agentic chat (spec 005): a BOUNDED propose-only tool loop. At most
+   * MAX_TOOL_ROUNDS assistant rounds may carry tool calls; the loop then forces
+   * a plain-text completion. A tool call never executes anything — it is
+   * captured as a raw proposal (last valid one wins) and answered with a
+   * synthetic result. Mid-loop failures degrade to whatever text exists.
+   */
+  async chatAgentic(
+    briefing: string,
+    history: ChatTurn[],
+    extras: AgenticChatExtras,
+    model: string
+  ): Promise<AgenticChatResult> {
+    const MAX_TOOL_ROUNDS = 3
+    const { system, messages } = buildAgenticPrompt(
+      briefing, history, extras, this.instructionsFor('chat.agentic')
+    )
+    const convo: Record<string, unknown>[] = [...messages]
+    const textParts: string[] = []
+    let rawProposal: RawProposal | undefined
+
+    try {
+      // Rounds 0..MAX-1 offer the tools; round MAX is the forced-text closer
+      // that only happens when the model was still calling tools at the cap.
+      for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+        const offerTools = round < MAX_TOOL_ROUNDS
+        const message = await this.createMessage({
+          model,
+          max_tokens: 700,
+          system,
+          messages: convo,
+          ...(offerTools ? { tools: PROPOSE_TOOLS, tool_choice: { type: 'auto' } } : {})
+        })
+
+        for (const block of message.content) {
+          if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
+            textParts.push(block.text.trim())
+          }
+        }
+
+        const toolUses = message.content.filter((c) => c.type === 'tool_use')
+        if (toolUses.length === 0) break
+
+        convo.push({ role: 'assistant', content: message.content })
+        const results = toolUses.map((tu) => {
+          // One pending card at a time: with one already on the table (from a
+          // previous turn or earlier in this loop), refuse rather than stack.
+          if (extras.hasPendingProposal) {
+            return {
+              type: 'tool_result',
+              tool_use_id: tu.id ?? '',
+              content: "A proposal is already awaiting the player's decision — continue in plain text.",
+              is_error: true
+            }
+          }
+          try {
+            rawProposal = parseProposalPayload(tu.name ?? '', tu.input) // last valid wins
+            return {
+              type: 'tool_result',
+              tool_use_id: tu.id ?? '',
+              content: 'Proposal recorded — it will be shown to the player for confirmation. Continue your reply in plain text.'
+            }
+          } catch (err) {
+            return {
+              type: 'tool_result',
+              tool_use_id: tu.id ?? '',
+              content: `${err instanceof Error ? err.message : 'Malformed payload'} — fix the payload or continue without proposing.`,
+              is_error: true
+            }
+          }
+        })
+        convo.push({ role: 'user', content: results })
+      }
+    } catch (err) {
+      // Mid-loop failure: whatever text already exists is still a coaching
+      // reply (FR-028). With nothing at all, the caller shows its retry bubble.
+      if (textParts.length === 0 && !rawProposal) throw err
+    }
+
+    const reply = textParts.join('\n').trim()
+    if (!reply && !rawProposal) throw new Error('Match coach returned an empty reply')
+    return { reply, ...(rawProposal ? { rawProposal } : {}) }
   }
 
   async planDiscovery(question: string, inventory: string, model: string): Promise<DiscoveryPlan> {

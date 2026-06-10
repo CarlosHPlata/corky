@@ -29,11 +29,11 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T004 Add `reflections` + `chat_sessions` tables, indexes, and the idempotent `INSERT OR IGNORE` legacy migration from `chat_transcripts` to src/main/adapters/driven/sqlite/schema.ts (exact SQL in data-model.md)
-- [ ] T005 [P] Create port src/main/application/ports/ReflectionRepository.ts (`list/get/upsert/delete/countForMatch`) and adapter src/main/adapters/driven/sqlite/SqliteReflectionRepository.ts
-- [ ] T006 [P] Create port src/main/application/ports/ChatSessionRepository.ts (`listMetas/get/upsert/resolveProposal`) and adapter src/main/adapters/driven/sqlite/SqliteChatSessionRepository.ts — `resolveProposal` transactional, asserts pending, exactly-once (research R7)
-- [ ] T007 Add migration idempotency test test/unit/schemaMigration.test.ts — legacy row → first session + first reflection; run migration twice → no duplicates; empty/corrupt legacy rows skipped (ABI caveat applies)
-- [ ] T008 Add query src/main/application/queries/GetChatSessions.ts + command src/main/application/commands/SaveChatSession.ts (lazy create, server-stamped title, reject resolution changes via save — contracts/ipc-chat-sessions.md); wire IPC `chat:sessions:list|get|save` in src/main/adapters/driving/IpcController.ts, src/preload/index.ts, src/main/infrastructure/container.ts
+- [X] T004 Add `reflections` + `chat_sessions` tables, indexes, and the idempotent `INSERT OR IGNORE` legacy migration from `chat_transcripts` to src/main/adapters/driven/sqlite/schema.ts (exact SQL in data-model.md)
+- [X] T005 [P] Create port src/main/application/ports/ReflectionRepository.ts (`list/get/upsert/delete/countForMatch`) and adapter src/main/adapters/driven/sqlite/SqliteReflectionRepository.ts
+- [X] T006 [P] Create port src/main/application/ports/ChatSessionRepository.ts (`listMetas/get/upsert/resolveProposal`) and adapter src/main/adapters/driven/sqlite/SqliteChatSessionRepository.ts — `resolveProposal` transactional, asserts pending, exactly-once (research R7)
+- [X] T007 Add migration idempotency test test/unit/schemaMigration.test.ts — legacy row → first session + first reflection; run migration twice → no duplicates; empty/corrupt legacy rows skipped (ABI caveat applies)
+- [X] T008 Add query src/main/application/queries/GetChatSessions.ts + command src/main/application/commands/SaveChatSession.ts (lazy create, server-stamped title, reject resolution changes via save — contracts/ipc-chat-sessions.md); wire IPC `chat:sessions:list|get|save` in src/main/adapters/driving/IpcController.ts, src/preload/index.ts, src/main/infrastructure/container.ts
 
 **Checkpoint**: Storage + session persistence ready — user stories can begin.
 

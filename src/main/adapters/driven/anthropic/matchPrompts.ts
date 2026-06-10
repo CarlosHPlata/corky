@@ -4,9 +4,10 @@ import type {
 } from '@shared/types'
 import type {
   ReviewExtras, TasksExtras, TaskProposal, ReflectionExtras, ReflectionProposal,
-  DiscoveryPlan, DiscoveryRequest
+  DiscoveryPlan, DiscoveryRequest, AgenticChatExtras
 } from '../../../application/ports/MatchCoachingModel'
 import type { GeneratedTask } from '../../../domain/report/focusTask'
+import type { RawProposal } from '../../../domain/chat/proposal'
 import type { ProposedSemanticObject } from '../../../domain/memory/semanticObject'
 import { isValidProposedObject } from '../../../domain/memory/semanticObject'
 import { isComputable } from '../../../domain/report/metricRegistry'
@@ -53,6 +54,7 @@ function scaffoldFor(passId: PromptId): string {
     case 'review': return REVIEW_SCAFFOLD
     case 'tasks': return TASKS_SCAFFOLD
     case 'chat': return CHAT_SCAFFOLD
+    case 'chat.agentic': return AGENTIC_SCAFFOLD
     case 'reflection': return REFLECTION_SCAFFOLD
     case 'discovery': return DISCOVERY_SCAFFOLD
   }
@@ -540,6 +542,169 @@ export function buildChatMessages(
     { role: 'user', content: briefing },
     ...history.map((h) => ({ role: h.role, content: h.text }))
   ]
+}
+
+// ── Agentic chat: confirm-first proposal tools (spec 005) ────────────────────
+// The chat model may PROPOSE state changes — never make them. Each tool call is
+// captured by the adapter as a raw proposal and answered with a synthetic
+// result; the command sanitises it (domain/chat/proposal.ts) and renders a
+// confirm-first card. Loop bounds and capture rules live in the adapter.
+
+const TASK_ITEM_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['description', 'metric', 'comparator', 'target', 'scope'],
+  properties: {
+    description: { type: 'string', description: 'A concrete, checkable next-game task.' },
+    metric: { type: 'string', description: 'One of the provided computable metric keys.' },
+    comparator: { type: 'string', enum: ['>=', '<=', '==', '>', '<'] },
+    target: { type: 'number' },
+    scope: { type: 'string', enum: ['champion', 'role', 'universal'] },
+    champion: { type: 'string' },
+    role: { type: 'string' }
+  }
+}
+
+export const PROPOSE_UPDATE_TASKS = {
+  name: 'propose_update_tasks',
+  description:
+    'Propose a change to the standing focus tasks. "set" is the FULL resulting task set you intend (1–3, computable metrics only); "retire" lists the ids of current tasks you are explicitly dropping. The player sees the result as a card and must accept it — nothing changes until they do.',
+  input_schema: {
+    type: 'object' as const,
+    additionalProperties: false,
+    required: ['set', 'retire'],
+    properties: {
+      set: { type: 'array', maxItems: 3, description: 'The FULL intended resulting set.', items: TASK_ITEM_SCHEMA },
+      retire: { type: 'array', items: { type: 'string' }, description: 'Ids of current tasks to drop.' }
+    }
+  }
+}
+
+export const PROPOSE_CREATE_REFLECTION = {
+  name: 'propose_create_reflection',
+  description:
+    "Propose saving a new reflection — a durable takeaway about this game in the PLAYER'S first-person voice. Optionally anchor it with refIds (STAT/MARK ids from the brief, or task:<id>). The player must accept it.",
+  input_schema: {
+    type: 'object' as const,
+    additionalProperties: false,
+    required: ['text'],
+    properties: {
+      text: { type: 'string', description: "The reflection, 1–4 short sentences, player's voice." },
+      refIds: { type: 'array', maxItems: 5, items: { type: 'string' }, description: 'Evidence ids from the brief (stat:/marker:/task: grammar).' }
+    }
+  }
+}
+
+export const PROPOSE_UPDATE_REFLECTION = {
+  name: 'propose_update_reflection',
+  description:
+    'Propose editing an existing reflection (by its id from the REFLECTIONS list). Send the full replacement text. The player must accept it.',
+  input_schema: {
+    type: 'object' as const,
+    additionalProperties: false,
+    required: ['reflectionId', 'text'],
+    properties: {
+      reflectionId: { type: 'string' },
+      text: { type: 'string', description: 'The full replacement text.' },
+      refIds: { type: 'array', maxItems: 5, items: { type: 'string' } }
+    }
+  }
+}
+
+export const PROPOSE_DELETE_REFLECTION = {
+  name: 'propose_delete_reflection',
+  description:
+    'Propose deleting an existing reflection (by its id from the REFLECTIONS list). The player must accept it.',
+  input_schema: {
+    type: 'object' as const,
+    additionalProperties: false,
+    required: ['reflectionId'],
+    properties: { reflectionId: { type: 'string' } }
+  }
+}
+
+export const PROPOSE_TOOLS = [
+  PROPOSE_UPDATE_TASKS,
+  PROPOSE_CREATE_REFLECTION,
+  PROPOSE_UPDATE_REFLECTION,
+  PROPOSE_DELETE_REFLECTION
+]
+
+const AGENTIC_SCAFFOLD = `You are coaching the player 1:1 over chat about ONE of their ranked League of Legends games. The first message gives you the facts of THIS game, their standing focus tasks, and their saved reflections — coach off those facts. Your PRIMARY job across the session: leave the player with a settled next-game task set.
+
+You can PROPOSE actions with the tools — change the focus tasks, save/edit/delete a reflection. A proposal is shown to the player as a card they accept or reject; NOTHING changes until they accept. Lines like [player accepted ...] / [player rejected ...] in the conversation tell you how earlier proposals went.
+
+Output contract (locked):
+- Reference only the real facts of this game. Never invent a number, a death, or a moment that isn't in the brief.
+- Propose only on clear player intent (they asked for a change/save) or one natural settling moment near the end — never on every turn, and at most ONE proposal per player message.
+- propose_update_tasks: send the FULL resulting set (1–3). Every metric MUST be one of the computable metric keys provided. To drop a current task, put its id in "retire" — omitting a task does NOT remove it.
+- Reflections are in the PLAYER'S first-person voice. refIds only from ids visible in the brief (stat:/marker:) or task:<id> for a standing task.
+- After a tool result, finish with a short plain-text reply that mentions the drafted card naturally.
+- Plain text only — no markdown, no headers, no bullet lists, no emoji.
+- Keep every reply to at most 4 sentences.`
+
+/** Render the agentic extras into the context lines appended to the briefing:
+ * the standing set (with ids the model must cite), the computable metric keys,
+ * and the match's reflections (with ids, for update/delete proposals). */
+export function renderAgenticContext(extras: AgenticChatExtras): string {
+  const standing = extras.standing.filter((t) => t.status === 'active')
+  const tasks = standing.length
+    ? standing.map((t) => `TASK [${t.id}] "${t.description}" ${t.metric} ${t.comparator} ${t.target} scope=${t.scope}`).join('\n')
+    : 'TASK none'
+  const reflections = extras.reflections.length
+    ? extras.reflections.map((r) => `REFL [${r.id}] (${r.source}) "${r.text}"`).join('\n')
+    : 'REFL none'
+  const pending = extras.hasPendingProposal
+    ? '\nA proposal is already awaiting the player\'s decision — do not propose another until they resolve it.'
+    : ''
+  return `Computable metric keys: ${extras.catalogMetricKeys.join(', ')}\n${tasks}\n${reflections}${pending}`
+}
+
+export function buildAgenticPrompt(
+  briefing: string,
+  history: { role: 'user' | 'assistant'; text: string }[],
+  extras: AgenticChatExtras,
+  instructions?: string
+): { system: string; messages: { role: 'user' | 'assistant'; content: string }[] } {
+  return {
+    system: buildSystemPrompt('chat.agentic', instructions),
+    messages: buildChatMessages(`${briefing}\n\n${renderAgenticContext(extras)}`, history)
+  }
+}
+
+/**
+ * Coerce one propose-tool payload into a RawProposal. THROWS with a model-fixable
+ * reason on malformed input — the adapter feeds the message back as an is_error
+ * tool result so the model can correct itself or continue without proposing.
+ */
+export function parseProposalPayload(toolName: string, input: unknown): RawProposal {
+  const o = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
+  if (toolName === 'propose_update_tasks') {
+    const proposal = parseTaskProposal(o)
+    if (proposal.set.length === 0 && proposal.retire.length === 0) {
+      throw new Error('propose_update_tasks needs at least one valid task in "set" or one id in "retire" (check the metric keys)')
+    }
+    return { kind: 'update_tasks', set: proposal.set, retire: proposal.retire }
+  }
+  if (toolName === 'propose_create_reflection' || toolName === 'propose_update_reflection') {
+    const text = nonEmpty(o.text)
+    if (!text) throw new Error(`${toolName} needs non-empty "text"`)
+    const refIds = (Array.isArray(o.refIds) ? o.refIds : []).filter(
+      (s): s is string => typeof s === 'string' && s.trim().length > 0
+    )
+    if (toolName === 'propose_create_reflection') {
+      return { kind: 'create_reflection', text, refIds }
+    }
+    const reflectionId = nonEmpty(o.reflectionId)
+    if (!reflectionId) throw new Error('propose_update_reflection needs "reflectionId"')
+    return { kind: 'update_reflection', text, refIds, reflectionId }
+  }
+  if (toolName === 'propose_delete_reflection') {
+    const reflectionId = nonEmpty(o.reflectionId)
+    if (!reflectionId) throw new Error('propose_delete_reflection needs "reflectionId"')
+    return { kind: 'delete_reflection', reflectionId }
+  }
+  throw new Error(`Unknown proposal tool: ${toolName}`)
 }
 
 // ── Chat discovery: the data scout (spec 004 / A5) ───────────────────────────

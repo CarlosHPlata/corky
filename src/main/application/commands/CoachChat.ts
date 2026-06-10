@@ -3,17 +3,25 @@ import type { ResolvedCoachingConfig } from '@shared/config'
 import type { MatchRepository } from '../ports/MatchRepository'
 import type { ReportRepository } from '../ports/ReportRepository'
 import type { SessionGoalRepository } from '../ports/SessionGoalRepository'
-import type { MatchCoachingModel, DiscoveryRequest } from '../ports/MatchCoachingModel'
+import type { MatchCoachingModel, DiscoveryRequest, AgenticChatExtras } from '../ports/MatchCoachingModel'
 import type { SemanticMemory } from '../ports/SemanticMemory'
 import type { BenchmarkDataSource } from '../ports/BenchmarkDataSource'
 import type { CoachingConfigRepository } from '../ports/CoachingConfigRepository'
+import type { ReflectionRepository } from '../ports/ReflectionRepository'
 import type { GetHistoryAggregates } from '../queries/GetHistoryAggregates'
 import type { SemanticObject } from '../../domain/memory/semanticObject'
 import { assembleMatchReport } from '../../domain/report/assembleMatchReport'
 import { buildCoachBriefing } from '../../domain/report/coachBriefing'
 import { makeRefLineRenderer } from '../../domain/report/resolveChatRefs'
+import { buildAnchorCatalog } from '../../domain/report/anchorCatalog'
 import { resolveConfig } from '../../domain/config/coachingConfig'
 import { renderHistoryBlock } from '../../domain/history/cohortAggregates'
+import { METRIC_KEYS } from '../../domain/report/metricRegistry'
+import {
+  sanitizeTaskProposal,
+  sanitizeReflectionProposal,
+  mintProposalId
+} from '../../domain/chat/proposal'
 
 /** Which config source gates each discovery kind. */
 const SOURCE_FOR_KIND: Record<DiscoveryRequest['kind'], string> = {
@@ -23,17 +31,18 @@ const SOURCE_FOR_KIND: Record<DiscoveryRequest['kind'], string> = {
 }
 
 /**
- * Post-game coaching chat (spec 004). Rebuilds the per-game briefing in the main
- * process from the stored match + the persisted analysis, so the renderer only
- * carries the transcript and no secrets cross preload (Constitution VI). One call
- * = one coach reply; the transcript lives renderer-side. Offline-grounded: the
- * facts come from stored JSON, only the reply needs connectivity.
+ * Post-game coaching chat (spec 004, agentic since spec 005). Rebuilds the
+ * per-game briefing in the main process from the stored match + the persisted
+ * analysis + this match's reflections, so the renderer only carries the
+ * transcript and no secrets cross preload (Constitution VI). One call = one
+ * coach reply, possibly carrying ONE confirm-first proposal turn: the model
+ * proposes via the bounded tool loop, the sanitiser (domain/chat/proposal)
+ * disposes, and NOTHING persists until the player accepts (ResolveProposal).
  *
- * Agentic discovery (A5): before replying, a bounded LIGHT planning call decides
- * which local/remote data would help with the player's question; the honored
- * requests (gated by config sources, capped by budget tier) are fetched
- * concurrently and appended to the briefing as a compact DOSSIER. Discovery is
- * best-effort all the way down — the chat must never break because it did.
+ * Agentic discovery (A5) is unchanged: a bounded LIGHT planning call decides
+ * which local/remote data would help, fetched concurrently into a DOSSIER.
+ * Discovery is best-effort all the way down — the chat never breaks because
+ * it did.
  */
 export class CoachChat {
   constructor(
@@ -44,16 +53,20 @@ export class CoachChat {
     private readonly getHistoryAggregates: GetHistoryAggregates,
     private readonly benchmarkSource: BenchmarkDataSource,
     private readonly coachingConfigRepo: CoachingConfigRepository,
+    private readonly reflectionRepo: ReflectionRepository,
     private readonly model: MatchCoachingModel,
-    private readonly chatModel: string
+    private readonly chatModel: string,
+    private readonly now: () => number = () => Date.now()
   ) {}
 
-  async execute(matchId: string, messages: ChatTurn[]): Promise<CoachChatReply> {
+  async execute(matchId: string, sessionId: string, messages: ChatTurn[]): Promise<CoachChatReply> {
     const account = this.matchRepo.getCurrentAccount()
     if (!account) throw new Error('No synced account')
     const report = this.loadReport(matchId, account.puuid)
     const analysis = this.reportRepo.getMatchAnalysis(matchId)
     const goal = this.goalRepo.get()?.goal?.trim() || undefined
+    const standing = this.reportRepo.getStandingTasks(account.puuid)
+    const reflections = this.reflectionRepo.list(matchId)
     let briefing = buildCoachBriefing(report, analysis, goal)
 
     const dossier = await this.runDiscovery(account.puuid, matchId, report, messages)
@@ -61,8 +74,52 @@ export class CoachChat {
       briefing += `\n\nDOSSIER (fetched for this question)\n${dossier.join('\n')}`
     }
 
-    const reply = await this.model.chat(briefing, this.groundRefs(report, messages), this.chatModel)
-    return { reply }
+    // One pending card at a time: with one already in the transcript, the model
+    // is told (and tool calls refused), so this turn can only be conversational.
+    const hasPendingProposal = messages.some((m) => m.proposal?.resolution === 'pending')
+    const extras: AgenticChatExtras = {
+      standing,
+      catalogMetricKeys: [...METRIC_KEYS],
+      reflections: reflections.map((r) => ({ id: r.id, source: r.source, text: r.text })),
+      hasPendingProposal
+    }
+
+    const result = await this.model.chatAgentic(
+      briefing,
+      this.groundTurns(report, messages),
+      extras,
+      this.chatModel
+    )
+
+    if (!result.rawProposal || hasPendingProposal) return { reply: result.reply }
+
+    // Sanitise BEFORE the turn exists: a persisted proposal is always
+    // acceptable modulo staleness (FR-010). A suppressed proposal degrades to
+    // the plain reply — the player never sees an unacceptable card.
+    const at = this.now()
+    const payload =
+      result.rawProposal.kind === 'update_tasks'
+        ? sanitizeTaskProposal(result.rawProposal, standing, matchId, at)
+        : sanitizeReflectionProposal(
+            result.rawProposal,
+            this.validRefIds(report, standing.map((t) => t.id)),
+            reflections
+          )
+    if (!payload) return { reply: result.reply }
+
+    const proposalTurn: ChatTurn = {
+      role: 'assistant',
+      text: result.reply,
+      proposal: { id: mintProposalId(sessionId, at), payload, resolution: 'pending' }
+    }
+    return { reply: result.reply, proposalTurn }
+  }
+
+  /** Every id a reflection proposal may cite: report anchors ∪ task:<id>. */
+  private validRefIds(report: MatchReport, taskIds: string[]): Set<string> {
+    const ids = new Set<string>(buildAnchorCatalog(report).keys())
+    for (const id of taskIds) ids.add(`task:${id}`)
+    return ids
   }
 
   /**
@@ -160,18 +217,31 @@ export class CoachChat {
   }
 
   /**
-   * Ground evidence-referenced turns: each message carrying refs gets its REF
-   * lines prepended to the text, so the model sees the fact behind the thing the
-   * player pointed at. The anchor catalog is built lazily, once, on the first ref
-   * encountered; turns without refs pass through untouched.
+   * Ground the transcript for the model: evidence-referenced turns get their
+   * REF lines prepended (the fact behind the thing the player pointed at), and
+   * turns carrying a RESOLVED proposal get a bracketed outcome line appended —
+   * that is how Reject "informs the coach" (FR-005) with no side channel.
    */
-  private groundRefs(report: MatchReport, messages: ChatTurn[]): ChatTurn[] {
+  private groundTurns(report: MatchReport, messages: ChatTurn[]): ChatTurn[] {
     const render = makeRefLineRenderer(report)
     return messages.map((m) => {
-      if (!m.refs?.length) return m
-      const lines = render(m.refs)
-      if (!lines.length) return m
-      return { ...m, text: `${lines.join('\n')}\n\n${m.text}` }
+      let text = m.text
+      if (m.refs?.length) {
+        const lines = render(m.refs)
+        if (lines.length) text = `${lines.join('\n')}\n\n${text}`
+      }
+      if (m.proposal) {
+        const outcome =
+          m.proposal.resolution === 'accepted'
+            ? '[player accepted the proposal]'
+            : m.proposal.resolution === 'rejected'
+              ? '[player rejected the proposal]'
+              : m.proposal.resolution === 'stale'
+                ? '[the proposal went stale before the player could act]'
+                : "[proposal awaiting the player's decision]"
+        text = `${text}\n${outcome}`
+      }
+      return text === m.text ? m : { ...m, text }
     })
   }
 

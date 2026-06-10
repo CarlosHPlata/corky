@@ -603,9 +603,13 @@ export interface IpcApi {
   analyzeMatch: (matchId: string, opts?: AnalyzeMatchOptions) => Promise<MatchAnalysis>
   /** Restore the stored analysis for a match (no model call), or null if never run. */
   getMatchAnalysis: (matchId: string) => Promise<MatchAnalysis | null>
-  /** Send the chat transcript to Corky and get his next coaching reply (spec 004).
-   * Context (this game's facts + Corky's read) is rebuilt in the main process. */
-  coachChat: (matchId: string, messages: ChatTurn[]) => Promise<CoachChatReply>
+  /** Send one session's transcript to Corky and get his next coaching reply.
+   * Context (this game's facts + Corky's read + reflections) is rebuilt in the
+   * main process. May carry a confirm-first proposal turn (spec 005). */
+  coachChat: (matchId: string, sessionId: string, messages: ChatTurn[]) => Promise<CoachChatReply>
+  /** Resolve one embedded proposal exactly once: accept applies it (validated
+   * against current state — may come back 'stale'), reject discards (spec 005). */
+  resolveProposal: (input: ResolveProposalInput) => Promise<ResolveProposalOutcome>
   /** Finalise the coaching session: Corky writes the reflection and may adjust the
    * standing focus tasks. Persists task changes; returns the written reflection. */
   finalizeReflection: (matchId: string, messages: ChatTurn[]) => Promise<ReflectionOutcome>

@@ -18,6 +18,8 @@ import type { GetChatTranscript } from '../../application/queries/GetChatTranscr
 import type { SaveChatTranscript } from '../../application/commands/SaveChatTranscript'
 import type { GetChatSessions } from '../../application/queries/GetChatSessions'
 import type { SaveChatSession } from '../../application/commands/SaveChatSession'
+import type { ResolveProposal } from '../../application/commands/ResolveProposal'
+import type { ResolveProposalInput } from '@shared/types'
 import type { ChatTranscriptRepository } from '../../application/ports/ChatTranscriptRepository'
 import type { AnalyzeMatchOptions, ChatTurn } from '@shared/types'
 import type { GetSessionAnalysis } from '../../application/queries/GetSessionAnalysis'
@@ -49,6 +51,7 @@ export function registerIpcHandlers(deps: {
   saveChatTranscript: SaveChatTranscript
   getChatSessions: GetChatSessions
   saveChatSession: SaveChatSession
+  resolveProposal: ResolveProposal
   /** Direct repo dep: the finalize handler and the reflection-save channel
    * persist the written reflection alongside the transcript. */
   chatTranscriptRepo: ChatTranscriptRepository
@@ -100,8 +103,12 @@ export function registerIpcHandlers(deps: {
     return deps.getMatchAnalysis.execute(matchId)
   })
 
-  ipcMain.handle('coach:chat', (_event, matchId: string, messages: ChatTurn[]) => {
-    return deps.coachChat.execute(matchId, messages)
+  ipcMain.handle('coach:chat', (_event, matchId: string, sessionId: string, messages: ChatTurn[]) => {
+    return deps.coachChat.execute(matchId, sessionId, messages)
+  })
+
+  ipcMain.handle('proposal:resolve', (_event, input: ResolveProposalInput) => {
+    return deps.resolveProposal.execute(input)
   })
 
   ipcMain.handle(

@@ -1,9 +1,10 @@
 import type {
-  FramingOutput, NarrationOutput, ReviewOutput,
+  FramingOutput, NarrationOutput, ReviewOutput, ReflectionSource,
   StandingFocusTask, FocusTaskEval, BenchmarkBasis, MetricKey, ChatTurn
 } from '@shared/types'
 import type { GeneratedTask } from '../../domain/report/focusTask'
 import type { ProposedSemanticObject } from '../../domain/memory/semanticObject'
+import type { RawProposal } from '../../domain/chat/proposal'
 
 /** Benchmark reference passed to the review pass (tagged with its basis). */
 export interface BenchmarkRef {
@@ -73,6 +74,25 @@ export interface ReflectionProposal {
   memory: ProposedSemanticObject[]
 }
 
+/** Extra context for the agentic chat call (spec 005): what the model may
+ * propose against. Compact projections only — never full rows. */
+export interface AgenticChatExtras {
+  standing: StandingFocusTask[]
+  /** The metric keys the extraction engine can compute (proposed tasks must use one). */
+  catalogMetricKeys: MetricKey[]
+  /** This match's reflections, projected for reference by id in proposals. */
+  reflections: { id: string; source: ReflectionSource; text: string }[]
+  /** True when a pending proposal already awaits the player — blocks new ones. */
+  hasPendingProposal: boolean
+}
+
+/** The agentic chat's bounded outcome: the reply text plus at most ONE raw
+ * (unsanitised) proposal captured from the tool loop. */
+export interface AgenticChatResult {
+  reply: string
+  rawProposal?: RawProposal
+}
+
 /** One data fetch the discovery planner asks for before a chat reply. `query`
  * is a free-text FTS hint, only meaningful for kind 'memory' — history and
  * benchmark requests are parameterless (the command knows the match context). */
@@ -105,6 +125,19 @@ export interface MatchCoachingModel {
    * never invents numbers (Constitution II).
    */
   chat(briefing: string, history: ChatTurn[], model: string): Promise<string>
+  /**
+   * Agentic coaching chat (spec 005): same briefing+history as `chat`, plus
+   * propose-only tools. The adapter runs a BOUNDED tool loop (≤3 rounds) and
+   * captures at most one raw proposal — it never executes anything. Returns
+   * the reply text and the captured proposal, if any; sanitisation and the
+   * confirm-first card are the command's job.
+   */
+  chatAgentic(
+    briefing: string,
+    history: ChatTurn[],
+    extras: AgenticChatExtras,
+    model: string
+  ): Promise<AgenticChatResult>
   /**
    * Plan the discovery step before a chat reply: given the player's question and
    * a one-line inventory of the data available, decide which fetches would
