@@ -22,6 +22,8 @@ export interface MatchRepository {
   /** Total stored matches for the player (drives the remote-extension heuristic). */
   countMatches(puuid: string): number
   getMatchDetail(matchId: string): MatchDetail | null
+  /** Stored match details (with raw JSON), newest-first, up to `limit` (history cohorts). */
+  listMatchDetails(puuid: string, limit: number): MatchDetail[]
   insertTimeline(timeline: Timeline): void
   getTimeline(matchId: string): Timeline | null
 }

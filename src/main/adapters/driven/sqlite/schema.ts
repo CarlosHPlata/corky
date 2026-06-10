@@ -137,5 +137,46 @@ export function runMigrations(db: Database.Database): void {
       notes      TEXT NOT NULL DEFAULT '',
       updated_at INTEGER
     );
+
+    -- Semantic Object Memory (SOM): small typed coaching facts distilled from
+    -- analysed games ("pattern: dies solo in river 14–20min"), accumulated per
+    -- player so the coach reasons longitudinally. Statements are FTS-indexed
+    -- (external-content fts5, kept in sync by the trigger trio) for recall.
+    CREATE TABLE IF NOT EXISTS semantic_objects (
+      id            TEXT PRIMARY KEY,
+      puuid         TEXT NOT NULL,
+      kind          TEXT NOT NULL,
+      champion      TEXT,
+      role          TEXT,
+      phase         TEXT,
+      metric        TEXT,
+      statement     TEXT NOT NULL,
+      evidence_json TEXT NOT NULL,
+      occurrences   INTEGER NOT NULL,
+      first_seen    INTEGER NOT NULL,
+      last_seen     INTEGER NOT NULL,
+      status        TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_semantic_objects_lookup
+      ON semantic_objects (puuid, status, kind);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS semantic_objects_fts
+      USING fts5(statement, content='semantic_objects', content_rowid='rowid');
+
+    CREATE TRIGGER IF NOT EXISTS semantic_objects_ai AFTER INSERT ON semantic_objects BEGIN
+      INSERT INTO semantic_objects_fts (rowid, statement) VALUES (new.rowid, new.statement);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS semantic_objects_ad AFTER DELETE ON semantic_objects BEGIN
+      INSERT INTO semantic_objects_fts (semantic_objects_fts, rowid, statement)
+        VALUES ('delete', old.rowid, old.statement);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS semantic_objects_au AFTER UPDATE ON semantic_objects BEGIN
+      INSERT INTO semantic_objects_fts (semantic_objects_fts, rowid, statement)
+        VALUES ('delete', old.rowid, old.statement);
+      INSERT INTO semantic_objects_fts (rowid, statement) VALUES (new.rowid, new.statement);
+    END;
   `)
 }

@@ -109,6 +109,18 @@ export class SqliteMatchRepository implements MatchRepository {
     return { matchId: row.match_id, rawJson: row.raw_json }
   }
 
+  listMatchDetails(puuid: string, limit: number): MatchDetail[] {
+    const rows = this.db
+      .prepare(
+        `SELECT match_id, raw_json FROM matches
+         WHERE puuid = ?
+         ORDER BY game_creation DESC, match_id DESC
+         LIMIT ?`
+      )
+      .all(puuid, limit) as Record<string, string>[]
+    return rows.map((r) => ({ matchId: r.match_id, rawJson: r.raw_json }))
+  }
+
   insertTimeline(timeline: Timeline): void {
     this.db
       .prepare('INSERT OR IGNORE INTO timelines (match_id, raw_json) VALUES (?, ?)')
