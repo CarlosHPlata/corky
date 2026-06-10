@@ -29,6 +29,7 @@ import { GetMatchAnalysis } from '../application/queries/GetMatchAnalysis'
 import { CoachChat } from '../application/commands/CoachChat'
 import { FinalizeReflection } from '../application/commands/FinalizeReflection'
 import { GetStandingTasks } from '../application/queries/GetStandingTasks'
+import { GetProgress } from '../application/queries/GetProgress'
 import { GetChatTranscript } from '../application/queries/GetChatTranscript'
 import { SaveChatTranscript } from '../application/commands/SaveChatTranscript'
 import { GetSessionGoal } from '../application/queries/GetSessionGoal'
@@ -133,6 +134,7 @@ export function buildContainer() {
     config.anthropicLightModel
   )
   const getStandingTasks = new GetStandingTasks(matchRepo, reportRepo)
+  const getProgress = new GetProgress(matchRepo, reportRepo, semanticMemory)
   const getChatTranscript = new GetChatTranscript(chatTranscriptRepo)
   const saveChatTranscript = new SaveChatTranscript(chatTranscriptRepo)
   const getSessionAnalysis = new GetSessionAnalysis(matchRepo, sessionAnalysisRepo)
@@ -167,6 +169,7 @@ export function buildContainer() {
     coachChat,
     finalizeReflection,
     getStandingTasks,
+    getProgress,
     chatTranscriptRepo,
     getChatTranscript,
     saveChatTranscript,

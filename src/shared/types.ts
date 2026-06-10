@@ -397,6 +397,31 @@ export interface FocusTaskEval {
   result: 'improved' | 'held' | 'regressed' | 'not_applicable'
 }
 
+/** One standing task's recent track record — a per-task row of the Home
+ * Progress card. Deterministic: built straight from stored evaluations. */
+export interface TaskProgress {
+  taskId: string
+  description: string
+  metric: string
+  /** newest-first results of the last evaluations, max 5 */
+  recent: TaskEvaluationResult[]
+  /** consecutive most-recent 'improved' or 'held' results */
+  streak: number
+}
+
+/** The player's coaching progress at a glance (Home) — how the focus-task loop
+ * is closing. Zero-LLM: standing-task track records plus what the semantic
+ * memory says Corky is still tracking and has already closed out. */
+export interface ProgressSummary {
+  tasks: TaskProgress[]
+  /** active patterns/weaknesses the coach is tracking, occurrences-descending, max 4 */
+  working: { statement: string; kind: string; occurrences: number }[]
+  /** resolved objects + milestones, newest-first, max 4 */
+  wins: { statement: string; kind: string }[]
+  /** total analysed games with a stored read */
+  analysedGames: number
+}
+
 /** Pass 4 — focus tasks + the since-last loop. */
 export interface TasksOutput {
   standing: StandingFocusTask[]
@@ -481,6 +506,10 @@ export interface IpcApi {
   /** The player's current standing focus tasks (global, 1–3). Empty until the
    * first game is analysed. Drives the Home "Next-game focus" card. */
   getStandingTasks: () => Promise<StandingFocusTask[]>
+  /** Deterministic read of coaching progress — per-task evaluation track
+   * records, what Corky is working on, and banked wins. No model call;
+   * drives the Home "Progress" card. */
+  getProgress: () => Promise<ProgressSummary>
   /** The stored coaching session for a match — chat turns plus the finalized
    * reflection (null until written) — or null when nothing was ever saved. */
   getChatTranscript: (

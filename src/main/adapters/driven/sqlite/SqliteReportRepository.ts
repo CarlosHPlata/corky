@@ -87,6 +87,31 @@ export class SqliteReportRepository implements ReportRepository {
     }))
   }
 
+  listTaskEvaluations(taskIds: string[]): TaskEvaluation[] {
+    if (!taskIds.length) return []
+    // Evaluations carry no timestamp of their own — order by the evaluating
+    // game's creation time (a missing match sorts last under DESC).
+    const rows = this.db
+      .prepare(
+        `SELECT te.* FROM task_evaluations te
+         LEFT JOIN matches m ON m.match_id = te.evaluating_match_id
+         WHERE te.task_id IN (${taskIds.map(() => '?').join(', ')})
+         ORDER BY m.game_creation DESC`
+      )
+      .all(...taskIds) as Record<string, unknown>[]
+    return rows.map((r) => ({
+      taskId: r.task_id as string,
+      evaluatingMatchId: r.evaluating_match_id as string,
+      result: r.result as TaskEvaluation['result'],
+      actualValue: r.actual_value as number | null
+    }))
+  }
+
+  countMatchAnalyses(): number {
+    const row = this.db.prepare('SELECT COUNT(*) AS n FROM match_analyses').get() as { n: number }
+    return row.n
+  }
+
   upsertMatchAnalysis(analysis: MatchAnalysis): void {
     // Guard: a partial run must not clobber a previously stored full read (FR-028).
     const existing = this.db

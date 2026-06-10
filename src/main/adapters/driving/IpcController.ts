@@ -13,6 +13,7 @@ import type { GetMatchAnalysis } from '../../application/queries/GetMatchAnalysi
 import type { CoachChat } from '../../application/commands/CoachChat'
 import type { FinalizeReflection } from '../../application/commands/FinalizeReflection'
 import type { GetStandingTasks } from '../../application/queries/GetStandingTasks'
+import type { GetProgress } from '../../application/queries/GetProgress'
 import type { GetChatTranscript } from '../../application/queries/GetChatTranscript'
 import type { SaveChatTranscript } from '../../application/commands/SaveChatTranscript'
 import type { ChatTranscriptRepository } from '../../application/ports/ChatTranscriptRepository'
@@ -41,6 +42,7 @@ export function registerIpcHandlers(deps: {
   coachChat: CoachChat
   finalizeReflection: FinalizeReflection
   getStandingTasks: GetStandingTasks
+  getProgress: GetProgress
   getChatTranscript: GetChatTranscript
   saveChatTranscript: SaveChatTranscript
   /** Direct repo dep: the finalize handler and the reflection-save channel
@@ -111,6 +113,10 @@ export function registerIpcHandlers(deps: {
 
   ipcMain.handle('tasks:standing:get', () => {
     return deps.getStandingTasks.execute()
+  })
+
+  ipcMain.handle('progress:get', () => {
+    return deps.getProgress.execute()
   })
 
   ipcMain.handle('chat:transcript:get', (_event, matchId: string) => {

@@ -7,6 +7,10 @@ export interface ReportRepository {
   getFocusTasks(matchId: string): FocusTask[]
   insertTaskEvaluation(evaluation: TaskEvaluation): void
   getTaskEvaluations(evaluatingMatchId: string): TaskEvaluation[]
+  /** All evaluations for the given tasks, newest evaluating game first (Home progress). */
+  listTaskEvaluations(taskIds: string[]): TaskEvaluation[]
+  /** Total matches with a stored analysis — the "analysed games" count (Home progress). */
+  countMatchAnalyses(): number
   /** Persist the AI match analysis (spec 004). A partial run never overwrites a
    * stored full ('done') read (FR-028). */
   upsertMatchAnalysis(analysis: MatchAnalysis): void
