@@ -2,7 +2,8 @@
 
 This document describes the agentic coaching platform built on top of the existing
 Corky match-analysis shell. The work was delivered in three epics (A, B, C) in a
-single session on 2026-06-10.
+single session on 2026-06-10, then evolved by **spec 005 (agentic coach chat)**
+the same day — see the "Spec 005" section below.
 
 ---
 
@@ -11,9 +12,9 @@ single session on 2026-06-10.
 Corky evolved from a static four-pass match analyser into a feedback loop:
 
 ```
-Analyse game → Coach chat → Finalize reflection → Semantic memory
-        ↑                                                  ↓
-        └────────────── Standing focus tasks ──────────────┘
+Analyse game → Coach chat (agentic, confirm-first) → Reflections → Semantic memory
+        ↑                       │ proposals                              ↓
+        └──── Standing focus tasks ◄── accepted update_tasks ───────────┘
 ```
 
 The app is a Windows-only Electron desktop app. All AI calls go to the Anthropic
@@ -325,6 +326,83 @@ written to SQLite via IPC, and removed from `localStorage` only on success.
 
 ---
 
+## Spec 005 — Agentic coach chat
+
+Spec 005 turned the read-only chat into an agentic coach with a **confirm-first
+mutation pipeline**, made reflections first-class and plural, and gave each
+match multiple chat sessions. The spec-004 finalize ceremony is gone.
+
+### Confirm-first proposals
+
+The chat model runs a **bounded propose-only tool loop** (`chatAgentic`,
+≤3 tool rounds per player message, then a forced text-only closer). Tools:
+`propose_update_tasks`, `propose_create_reflection`, `propose_update_reflection`,
+`propose_delete_reflection`. A tool call NEVER executes anything — the adapter
+captures it as a raw proposal and answers with a synthetic "shown to the player"
+result. Sanitisation is pure (`domain/chat/proposal.ts`): task payloads run the
+metric-registry/1–3/never-empty-by-omission gauntlet (a proposed task sharing a
+metric+scope *lane* with an existing one MODIFIES it, inheriting its id);
+reflection refs filter against anchor catalog ∪ `task:` grammar; anything
+unusable degrades to a plain reply — the player never sees an unacceptable card.
+
+The surviving proposal is embedded in the assistant `ChatTurn`
+(`turn.proposal: ActionProposal`, persisted with the transcript) and rendered as
+a `ProposalCard` (pending → accepted | rejected | stale, exactly once). One
+pending proposal per session at a time.
+
+**`ResolveProposal`** is the only write path for model-initiated change:
+staleness gate at accept time (task proposals carry a shape-signature `baseline`
+of the standing set; reflection update/delete carry the target's `updatedAt`),
+mark-resolved-first inside a transaction (double-clicks converge on one
+application), apply, revert-to-pending on apply failure. Accepting a coach
+`create_reflection` fires **memory distillation** (`DistillSessionMemory`) as a
+floating promise — additive merge semantics preserved, never blocks the accept.
+
+### Reflections (plural, first-class)
+
+`reflections` table: many per match, each `text + refs(0..5) + source
+(player|coach) + timestamps`. Manual CRUD (`SaveReflection`/`DeleteReflection`/
+`ListReflections`) is model-free and offline; coach-authored rows only land via
+accepted proposals. The report has a Reflections panel whose composer consumes
+the same pendingRefs pool as the chat. "Summarize into a reflection"
+(`SummarizeIntoReflection`) replaced finalize: one forced-tool call wrapped as a
+standard `create_reflection` proposal. Every chat call carries all of the
+match's reflections in context; they feed distillation but are never
+`semantic_objects` rows.
+
+### Chat sessions (Claude-style)
+
+`chat_sessions` table: many per match, transcripts independent, context shared
+(rebuilt server-side per call). "New chat" is a renderer **draft** — a row is
+created lazily on the first persisted player turn, so empty sessions never
+accumulate. The legacy `chat_transcripts` row migrates idempotently
+(`INSERT OR IGNORE`, deterministic `-sess-legacy` / `-refl-legacy` ids) into
+the first session + first reflection; the table is retained as migration
+source only.
+
+### Touchable tasks
+
+Standing-task rows on the report are `Askable`: clicking attaches
+`task:<taskId>` evidence to the next message, resolved server-side against the
+standing set into `REF task:… "desc" rule=… scope=… status=…` lines (vanished
+tasks ground as not-found, consistent with invalid report refs).
+
+### Key files (005)
+
+| File | Role |
+|---|---|
+| `src/main/domain/chat/proposal.ts` | Sanitise / baseline / staleness / id-minting (pure) |
+| `src/main/application/commands/ResolveProposal.ts` | The only model-initiated write path |
+| `src/main/application/commands/SummarizeIntoReflection.ts` | Finalize's replacement (proposal-emitting) |
+| `src/main/application/commands/DistillSessionMemory.ts` | Post-accept memory distillation |
+| `src/main/adapters/driven/anthropic/AnthropicMatchCoachingModel.ts` | `chatAgentic` bounded loop, `summarizeReflectionText`, `distillMemory` |
+| `src/main/adapters/driven/sqlite/SqliteChatSessionRepository.ts` | Exactly-once proposal resolution (transactional) |
+| `src/renderer/src/components/coaching/ProposalCard.tsx` | Confirm-first card, four states |
+| `src/renderer/src/components/coaching/ReflectionsPanel.tsx` | Reflection list + manual composer |
+| `src/renderer/src/data/useChatSessions.ts` | Sessions, drafts, sends, resolutions |
+
+---
+
 ## Data flow diagram
 
 ```
@@ -339,12 +417,20 @@ IpcController            ──► AnalyzeMatch ──► AnthropicMatchCoaching
   │
   ├──► CoachChat          ──► planDiscovery (light model)
   │         │             ──► parallel fetches (per-source adapters)
-  │         │             ──► groundRefs (AnchorCatalog)
-  │         └──► model.chat (light model)
+  │         │             ──► groundTurns (AnchorCatalog + standing tasks)
+  │         └──► model.chatAgentic (light, ≤3 propose-only tool rounds)
+  │                   └──► sanitise (domain/chat/proposal) → proposalTurn
   │
-  ├──► FinalizeReflection ──► model.summarizeReflection (light model)
-  │         │             ──► mergeSemanticObjects → SqliteSemanticMemory
-  │         └──► mergeStanding → SqliteReportRepository
+  ├──► ResolveProposal    ──► staleness gate → exactly-once resolve (chat_sessions)
+  │         │             ──► apply: SqliteReportRepository | SqliteReflectionRepository
+  │         └──► (coach reflection accepted) DistillSessionMemory — fire & forget
+  │                   └──► model.distillMemory → mergeSemanticObjects → SqliteSemanticMemory
+  │
+  ├──► SummarizeIntoReflection ──► model.summarizeReflectionText → create_reflection proposal
+  │
+  ├──► Save/Delete/ListReflections ──► SqliteReflectionRepository (model-free, offline)
+  │
+  ├──► GetChatSessions / SaveChatSession ──► SqliteChatSessionRepository (lazy create)
   │
   └──► GetProgress        ──► SqliteReportRepository (evals + tasks)
                           ──► SqliteSemanticMemory (working-on + wins)
@@ -383,11 +469,34 @@ CREATE TABLE coaching_config (
   overrides_json TEXT NOT NULL
 );
 
--- Chat turns + reflection per match
+-- Chat turns + reflection per match (spec 004 — retained as the 005 migration
+-- source only; no feature code reads or writes it anymore)
 CREATE TABLE chat_transcripts (
   match_id TEXT PRIMARY KEY,
   turns_json TEXT NOT NULL,
   reflection TEXT
+);
+
+-- Player/coach takeaways per match (spec 005); refs_json holds EvidenceRef[]
+CREATE TABLE reflections (
+  id         TEXT PRIMARY KEY,
+  match_id   TEXT NOT NULL,
+  text       TEXT NOT NULL,
+  refs_json  TEXT NOT NULL,
+  source     TEXT NOT NULL,            -- 'player' | 'coach'
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+-- Coaching chat sessions (spec 005); turns_json embeds ActionProposals +
+-- their resolutions; rows created lazily on the first player turn
+CREATE TABLE chat_sessions (
+  id         TEXT PRIMARY KEY,
+  match_id   TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  turns_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
 );
 ```
 
@@ -402,16 +511,22 @@ CREATE TABLE chat_transcripts (
 | AnalyzeMatch pass 3 (review) | heavy | Prose verdict; needs depth |
 | AnalyzeMatch pass 4 (tasks) | heavy | Sustained-set reasoning |
 | CoachChat planning (discovery) | light | max 300 tokens |
-| CoachChat response | light | Conversational; frequent |
-| FinalizeReflection | light | Closing step; fast |
+| CoachChat response + propose loop | light | Conversational; frequent; ≤3 bounded tool rounds |
+| SummarizeIntoReflection | light | One forced-tool call |
+| DistillSessionMemory | light | Post-accept, fire-and-forget |
 | Session/quick analysis | configurable | Pre-existing feature |
 
 ---
 
 ## Key invariants
 
-- **No free tool loops.** The discovery agent runs a single planning call then
-  parallel fetches — bounded, predictable cost.
+- **No unbounded tool loops** (softened from "no free tool loops" by spec 005,
+  rationale in `specs/005-agentic-coach-chat/plan.md`). Discovery stays a single
+  planning call + parallel fetches; the chat's propose loop is hard-capped at 3
+  rounds with propose-only tools — no side effects inside the loop, ever.
+- **Confirm-first mutations (spec 005).** A model tool call never writes.
+  Proposals are sanitised before they are persisted, render as cards, and apply
+  only through `ResolveProposal`: staleness-gated, exactly-once, revertible.
 - **Deterministic evals before the model.** Task evaluations (since-last loop)
   are computed from the metric registry before the model is called. A model
   failure in pass 4 still surfaces the correct since-last read.

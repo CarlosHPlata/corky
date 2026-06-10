@@ -114,9 +114,9 @@
 
 **Independent Test**: After chat turns, click "Summarize into a reflection" → standard card → accept → reflection stored, tasks untouched, semantic memory updated shortly after (quickstart steps 7, 12).
 
-- [ ] T029 [P] [US5] Add `summarizeReflectionText` (forced-tool: text + refIds) and `distillMemory` (existing memory projection → `ProposedSemanticObject[]`) to src/main/adapters/driven/anthropic/AnthropicMatchCoachingModel.ts + prompt builders/validators in matchPrompts.ts + port methods in src/main/application/ports/MatchCoachingModel.ts; fake-`CreateMessage` tests
-- [ ] T030 [US5] Create src/main/application/commands/SummarizeIntoReflection.ts (≥1 player turn check, pending-proposal check, emits `create_reflection` proposalTurn — research R8) + wire IPC `coach:summarize`; add the fire-and-forget distillation hook to ResolveProposal.ts on accepted coach `create_reflection` (`distillMemory` → `mergeSemanticObjects` → `semanticMemory.upsert`, floating promise, `.catch` → log) + extend ResolveProposal.test.ts (distillation failure doesn't fail accept)
-- [ ] T031 [US5] Replace the renderer finalize flow in src/renderer/src/components/CoachChat.tsx — "Summarize into a reflection" button → `window.api.summarizeIntoReflection`, drop the done/reflection view (reflections live in the panel now); delete src/main/application/commands/FinalizeReflection.ts, `summarizeReflection` + `ReflectionExtras`/`ReflectionProposal` from the port and adapter, `coach:reflection:finalize` channel, `finalizeReflection` from IpcApi/preload, `ReflectionOutcome` from src/shared/types.ts; remove dead FinalizeReflection wiring from container.ts; full typecheck + `npm test` sweep
+- [X] T029 [P] [US5] Add `summarizeReflectionText` (forced-tool: text + refIds) and `distillMemory` (existing memory projection → `ProposedSemanticObject[]`) to src/main/adapters/driven/anthropic/AnthropicMatchCoachingModel.ts + prompt builders/validators in matchPrompts.ts + port methods in src/main/application/ports/MatchCoachingModel.ts; fake-`CreateMessage` tests
+- [X] T030 [US5] Create src/main/application/commands/SummarizeIntoReflection.ts (≥1 player turn check, pending-proposal check, emits `create_reflection` proposalTurn — research R8) + wire IPC `coach:summarize`; add the fire-and-forget distillation hook to ResolveProposal.ts on accepted coach `create_reflection` (`distillMemory` → `mergeSemanticObjects` → `semanticMemory.upsert`, floating promise, `.catch` → log) + extend ResolveProposal.test.ts (distillation failure doesn't fail accept)
+- [X] T031 [US5] Replace the renderer finalize flow in src/renderer/src/components/CoachChat.tsx — "Summarize into a reflection" button → `window.api.summarizeIntoReflection`, drop the done/reflection view (reflections live in the panel now); delete src/main/application/commands/FinalizeReflection.ts, `summarizeReflection` + `ReflectionExtras`/`ReflectionProposal` from the port and adapter, `coach:reflection:finalize` channel, `finalizeReflection` from IpcApi/preload, `ReflectionOutcome` from src/shared/types.ts; remove dead FinalizeReflection wiring from container.ts; full typecheck + `npm test` sweep
 
 **Checkpoint**: All five stories functional; legacy flow fully removed.
 
@@ -125,8 +125,8 @@
 ## Phase 8: Polish & Cross-Cutting
 
 - [ ] T032 Run the full quickstart.md acceptance walk (12 steps) against a real analysed match; fix anything that fails
-- [ ] T033 [P] Update architecture.md — agentic loop (bounded, propose-only), proposals/resolution, reflections store, sessions, revised data-flow diagram and schema section; note the softened "no unbounded tool loops" invariant
-- [ ] T034 Cleanup sweep — remove remaining dead code paths referencing `chat_transcripts` outside schema.ts migration + ChatTranscriptRepository (kept as migration source); confirm `npm test` green and lint clean
+- [X] T033 [P] Update architecture.md — agentic loop (bounded, propose-only), proposals/resolution, reflections store, sessions, revised data-flow diagram and schema section; note the softened "no unbounded tool loops" invariant
+- [X] T034 Cleanup sweep — remove remaining dead code paths referencing `chat_transcripts` outside schema.ts migration + ChatTranscriptRepository (kept as migration source); confirm `npm test` green and lint clean
 
 ---
 
