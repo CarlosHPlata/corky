@@ -54,6 +54,31 @@ export interface RosterEntry {
   assists: number
   cs: number
   gold: number
+  /** Final champion level (1–18); 0 when absent in the raw JSON. */
+  champLevel: number
+  /** Total damage dealt to champions; 0 when absent. */
+  damageToChampions: number
+  /** Riot ID game name; '' when absent. */
+  riotId: string
+  /** The two summoner-spell ids; 0 ⇒ unknown slot. */
+  summonerSpellIds: number[]
+  /** Keystone perk id (primary tree, first selection); null when absent. */
+  keystoneId: number | null
+  /** Primary rune tree (style) id; null when absent. */
+  primaryStyleId: number | null
+  /** Secondary rune tree (style) id; null when absent. */
+  subStyleId: number | null
+  /** item0–item5, exactly 6 slots; 0 ⇒ empty slot. */
+  itemIds: number[]
+  /** item6 (the trinket); 0 ⇒ none. */
+  trinketId: number
+}
+
+/** One team's objective tallies for the scoreboard header. */
+export interface TeamObjectives {
+  towers: number
+  dragons: number
+  barons: number
 }
 
 /** Who the player faced — lanes for one game. */
@@ -65,6 +90,9 @@ export interface Matchup {
   allies: RosterEntry[]
   /** 5 entries, role-ordered. */
   enemies: RosterEntry[]
+  /** Objective tallies per side; null when the raw JSON lacks teams data. */
+  allyObjectives: TeamObjectives | null
+  enemyObjectives: TeamObjectives | null
 }
 
 /** The headline economy line for the player's game. */

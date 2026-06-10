@@ -3,6 +3,56 @@
 // `useMatchReport`. Covers win / loss / no-timeline / zero-deaths states.
 import type { MatchReport, RosterEntry } from '@shared/types'
 
+// Per-champion loadout (spells, keystone + trees, full build, trinket) so the
+// scoreboard stub shows the same shape the extractor produces from raw match-v5.
+interface StubLoadout {
+  summs: number[]
+  key: number
+  pri: number
+  sub: number
+  items: number[]
+  trinket: number
+  name: string
+}
+
+const LOADOUTS: Record<string, StubLoadout> = {
+  Garen:    { summs: [4, 12], key: 8010, pri: 8000, sub: 8400, items: [6631, 3047, 3053, 3742, 3065, 3156], trinket: 3340, name: 'DemaciaNow' },
+  LeeSin:   { summs: [4, 11], key: 8010, pri: 8000, sub: 8100, items: [6692, 3047, 3071, 6610, 3053, 0],    trinket: 3364, name: 'BlindMonk' },
+  Ahri:     { summs: [4, 12], key: 8112, pri: 8100, sub: 8300, items: [6655, 3020, 4645, 3089, 3157, 4628], trinket: 3340, name: 'Corky' },
+  Jinx:     { summs: [4, 7],  key: 8008, pri: 8000, sub: 8100, items: [6672, 3006, 3031, 3085, 3036, 0],    trinket: 3363, name: 'PowPow' },
+  Thresh:   { summs: [4, 14], key: 8439, pri: 8400, sub: 8300, items: [3190, 3117, 3109, 3050, 2055, 0],    trinket: 3364, name: 'LanternBot' },
+  Sett:     { summs: [4, 12], key: 8010, pri: 8000, sub: 8400, items: [3078, 3047, 3053, 3742, 0, 0],       trinket: 3340, name: 'TheBoss' },
+  Vi:       { summs: [4, 11], key: 8010, pri: 8000, sub: 8300, items: [6692, 3047, 3071, 3053, 3026, 0],    trinket: 3364, name: 'PiltoverFist' },
+  Zed:      { summs: [4, 14], key: 8112, pri: 8100, sub: 8000, items: [6692, 3158, 3142, 3814, 6694, 6676], trinket: 3340, name: 'ShadowMaster' },
+  Caitlyn:  { summs: [4, 7],  key: 8021, pri: 8000, sub: 8200, items: [6676, 3006, 3031, 3036, 3094, 0],    trinket: 3363, name: 'OnTheCase' },
+  Lux:      { summs: [4, 14], key: 8229, pri: 8200, sub: 8300, items: [6655, 3020, 4628, 3157, 2055, 0],    trinket: 3364, name: 'FinalSpark' },
+  Ornn:     { summs: [4, 12], key: 8437, pri: 8400, sub: 8300, items: [3068, 3047, 3075, 4401, 3065, 0],    trinket: 3340, name: 'ForgeFire' },
+  "Kai'Sa": { summs: [4, 7],  key: 9923, pri: 8100, sub: 8000, items: [6672, 3006, 3124, 3031, 3036, 0],    trinket: 3363, name: 'DaughterOfVoid' },
+  Nautilus: { summs: [4, 14], key: 8439, pri: 8400, sub: 8300, items: [3190, 3117, 3109, 3050, 2055, 0],    trinket: 3364, name: 'TitanAnchor' },
+  Camille:  { summs: [4, 12], key: 8010, pri: 8000, sub: 8400, items: [3078, 3047, 3074, 3053, 3026, 0],    trinket: 3340, name: 'SteelShadow' },
+  Graves:   { summs: [4, 11], key: 8021, pri: 8000, sub: 8100, items: [6676, 3047, 3036, 3031, 3814, 0],    trinket: 3364, name: 'CigarSmoke' },
+  Syndra:   { summs: [4, 12], key: 8369, pri: 8300, sub: 8200, items: [6655, 3020, 4645, 3089, 3157, 0],    trinket: 3340, name: 'DarkSovereign' },
+  Jhin:     { summs: [4, 7],  key: 8128, pri: 8100, sub: 8200, items: [6676, 3009, 3094, 3036, 3031, 0],    trinket: 3363, name: 'FourShots' },
+  Leona:    { summs: [4, 14], key: 8439, pri: 8400, sub: 8300, items: [3190, 3047, 3109, 3050, 2055, 0],    trinket: 3364, name: 'SolarFlare' }
+}
+
+const NO_LOADOUT: StubLoadout = { summs: [4, 4], key: 8010, pri: 8000, sub: 8100, items: [0, 0, 0, 0, 0, 0], trinket: 3340, name: 'Summoner' }
+
+function loadout(champion: string, isYou: boolean): Pick<RosterEntry,
+  'riotId' | 'summonerSpellIds' | 'keystoneId' | 'primaryStyleId' | 'subStyleId' | 'itemIds' | 'trinketId'
+> {
+  const lo = LOADOUTS[champion] ?? NO_LOADOUT
+  return {
+    riotId: isYou ? 'Corky' : lo.name,
+    summonerSpellIds: lo.summs,
+    keystoneId: lo.key,
+    primaryStyleId: lo.pri,
+    subStyleId: lo.sub,
+    itemIds: [...lo.items],
+    trinketId: lo.trinket
+  }
+}
+
 function roster(
   champs: string[],
   teamId: number,
@@ -10,18 +60,25 @@ function roster(
   laneRole?: string
 ): RosterEntry[] {
   const roles = ['Top', 'Jungle', 'Mid', 'Bot', 'Support']
-  return champs.map((champion, i) => ({
-    champion,
-    role: roles[i],
-    teamId,
-    isYou: roles[i] === youRole,
-    isLaneOpponent: roles[i] === laneRole,
-    kills: 3 + ((i * 2 + teamId) % 8),
-    deaths: 2 + ((i + teamId) % 5),
-    assists: 4 + ((i * 3) % 9),
-    cs: 150 + i * 18 + (teamId === 100 ? 12 : 0),
-    gold: 9000 + i * 700 + (teamId === 100 ? 600 : 0)
-  }))
+  return champs.map((champion, i) => {
+    const kills = 3 + ((i * 2 + teamId) % 8)
+    const assists = 4 + ((i * 3) % 9)
+    return {
+      champion,
+      role: roles[i],
+      teamId,
+      isYou: roles[i] === youRole,
+      isLaneOpponent: roles[i] === laneRole,
+      kills,
+      deaths: 2 + ((i + teamId) % 5),
+      assists,
+      cs: 150 + i * 18 + (teamId === 100 ? 12 : 0),
+      gold: 9000 + i * 700 + (teamId === 100 ? 600 : 0),
+      champLevel: 13 + ((i * 2 + teamId) % 6),
+      damageToChampions: (roles[i] === 'Support' ? 7000 : 12000) + (kills + assists) * 850 + i * 900,
+      ...loadout(champion, roles[i] === youRole)
+    }
+  })
 }
 
 // A 31-minute team gold-diff curve in raw gold (renderer scales to k).
@@ -40,10 +97,12 @@ export const STUB_REPORT_LOSS: MatchReport = {
     durationSec: 1884, queue: 420
   },
   matchup: {
-    you: { champion: 'Ahri', role: 'Mid', teamId: 100, isYou: true, isLaneOpponent: false, kills: 6, deaths: 7, assists: 9, cs: 214, gold: 13200 },
-    laneOpponent: { champion: 'Zed', role: 'Mid', teamId: 200, isYou: false, isLaneOpponent: true, kills: 9, deaths: 4, assists: 6, cs: 231, gold: 14100 },
+    you: { champion: 'Ahri', role: 'Mid', teamId: 100, isYou: true, isLaneOpponent: false, kills: 6, deaths: 7, assists: 9, cs: 214, gold: 13200, champLevel: 16, damageToChampions: 24800, ...loadout('Ahri', true) },
+    laneOpponent: { champion: 'Zed', role: 'Mid', teamId: 200, isYou: false, isLaneOpponent: true, kills: 9, deaths: 4, assists: 6, cs: 231, gold: 14100, champLevel: 17, damageToChampions: 29500, ...loadout('Zed', false) },
     allies: roster(['Garen', 'LeeSin', 'Ahri', 'Jinx', 'Thresh'], 100, 'Mid'),
-    enemies: roster(['Sett', 'Vi', 'Zed', 'Caitlyn', 'Lux'], 200, undefined, 'Mid')
+    enemies: roster(['Sett', 'Vi', 'Zed', 'Caitlyn', 'Lux'], 200, undefined, 'Mid'),
+    allyObjectives: { towers: 3, dragons: 2, barons: 0 },
+    enemyObjectives: { towers: 9, dragons: 2, barons: 1 }
   },
   breakdown: {
     csAt10: 74, csPerMin: 6.9, goldAt14: 1400, goldAt24: -2100,
@@ -85,10 +144,12 @@ export const STUB_REPORT_WIN: MatchReport = {
     durationSec: 1730, queue: 420
   },
   matchup: {
-    you: { champion: 'Ahri', role: 'Mid', teamId: 100, isYou: true, isLaneOpponent: false, kills: 11, deaths: 3, assists: 7, cs: 248, gold: 14800 },
-    laneOpponent: { champion: 'Syndra', role: 'Mid', teamId: 200, isYou: false, isLaneOpponent: true, kills: 4, deaths: 8, assists: 5, cs: 215, gold: 11900 },
+    you: { champion: 'Ahri', role: 'Mid', teamId: 100, isYou: true, isLaneOpponent: false, kills: 11, deaths: 3, assists: 7, cs: 248, gold: 14800, champLevel: 18, damageToChampions: 31400, ...loadout('Ahri', true) },
+    laneOpponent: { champion: 'Syndra', role: 'Mid', teamId: 200, isYou: false, isLaneOpponent: true, kills: 4, deaths: 8, assists: 5, cs: 215, gold: 11900, champLevel: 15, damageToChampions: 19300, ...loadout('Syndra', false) },
     allies: roster(['Ornn', 'Vi', 'Ahri', "Kai'Sa", 'Nautilus'], 100, 'Mid'),
-    enemies: roster(['Camille', 'Graves', 'Syndra', 'Jhin', 'Leona'], 200, undefined, 'Mid')
+    enemies: roster(['Camille', 'Graves', 'Syndra', 'Jhin', 'Leona'], 200, undefined, 'Mid'),
+    allyObjectives: { towers: 8, dragons: 3, barons: 1 },
+    enemyObjectives: { towers: 2, dragons: 1, barons: 0 }
   },
   breakdown: {
     csAt10: 78, csPerMin: 8.1, goldAt14: 2100, goldAt24: 3200,

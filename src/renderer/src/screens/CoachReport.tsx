@@ -16,10 +16,12 @@ import { useMatchReport } from '../data/useMatchReport'
 import { useMatchAnalysis } from '../data/useMatchAnalysis'
 import { useReflections } from '../data/useReflections'
 import { formatDuration, queueLabel } from '../utils/format'
+import * as dd from '../utils/ddragon'
+import { ensureLoadoutDataLoaded } from '../utils/ddragon'
 import type {
-  MatchReport, MatchCore, Matchup as MatchupData, Breakdown as BreakdownData,
-  GoldTimeline, DeathMap as DeathMapData, Highlight, RosterEntry, DeathNarration,
-  EvidenceRef,
+  MatchCore, Matchup as MatchupData, Breakdown as BreakdownData,
+  DeathMap as DeathMapData, Highlight, RosterEntry, DeathNarration,
+  EvidenceRef, TeamObjectives, FramingOutput,
 } from '@shared/types'
 
 // Corky desktop — Post-game report.
@@ -128,61 +130,194 @@ function Scoreline({ core, onAsk }: { core: MatchCore; onAsk?: AddRef }) {
   )
 }
 
-// ── FACTUAL: lane-by-lane matchup (US2) ──────────────────────────────────────
-function statLine(e: RosterEntry): string {
-  return `${e.kills}/${e.deaths}/${e.assists} · ${e.cs} cs · ${goldK(e.gold)}`
+// ── FACTUAL: full-width post-game scoreboard (US2) ───────────────────────────
+// Two stacked team blocks, each row carrying the player's loadout (spells,
+// runes, 6 item slots + trinket) and stat line (K/D/A, KDA, CS, KP, damage).
+// All numbers come straight off the stored match; names/icons resolve via Data
+// Dragon and degrade to the static code maps below when offline.
+
+// Static fallbacks so the scoreboard stays legible without Data Dragon.
+const SPELL_FALLBACK: Record<number, { code: string; name: string }> = {
+  1: { code: 'CL', name: 'Cleanse' }, 3: { code: 'EX', name: 'Exhaust' }, 4: { code: 'F', name: 'Flash' },
+  6: { code: 'GH', name: 'Ghost' }, 7: { code: 'HL', name: 'Heal' }, 11: { code: 'SM', name: 'Smite' },
+  12: { code: 'TP', name: 'Teleport' }, 13: { code: 'CLR', name: 'Clarity' }, 14: { code: 'IG', name: 'Ignite' },
+  21: { code: 'BR', name: 'Barrier' }, 32: { code: 'MK', name: 'Mark' },
+}
+const TREE_INFO: Record<number, { name: string; tone: string }> = {
+  8000: { name: 'Precision', tone: 'var(--gold-400)' },
+  8100: { name: 'Domination', tone: 'var(--red-400)' },
+  8200: { name: 'Sorcery', tone: 'var(--blue-400)' },
+  8300: { name: 'Inspiration', tone: 'var(--violet-400)' },
+  8400: { name: 'Resolve', tone: 'var(--teal-400)' },
+}
+const KEYSTONE_FALLBACK: Record<number, string> = {
+  8005: 'Press the Attack', 8008: 'Lethal Tempo', 8010: 'Conqueror', 8021: 'Fleet Footwork',
+  8112: 'Electrocute', 8128: 'Dark Harvest', 9923: 'Hail of Blades',
+  8214: 'Summon Aery', 8229: 'Arcane Comet', 8230: 'Phase Rush',
+  8351: 'Glacial Augment', 8360: 'Unsealed Spellbook', 8369: 'First Strike',
+  8437: 'Grasp of the Undying', 8439: 'Aftershock', 8465: 'Guardian',
 }
 
-function Matchup({ matchup }: { matchup: MatchupData }) {
-  const rows = matchup.allies.map((a, i) => ({ a, e: matchup.enemies[i] as RosterEntry | undefined }))
+function code3(name: string): string {
+  return (name.match(/[A-Za-z]/g) ?? []).join('').slice(0, 3).toUpperCase()
+}
+
+function fmtDmg(n: number): string {
+  return n.toLocaleString('en-US')
+}
+
+function SpellIcon({ id }: { id: number }) {
+  const name = dd.spellName(id) ?? SPELL_FALLBACK[id]?.name ?? (id ? `Spell ${id}` : 'Unknown')
+  const url = dd.spellImgUrl(id)
   return (
-    <Card padding={16}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 56px 1fr', alignItems: 'center', gap: '0 12px', marginBottom: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--data-ally)', flex: 'none' }} />
-          <span className="eyebrow" style={{ fontSize: 11, color: 'var(--blue-400)' }}>Your team</span>
+    <span className="ck-sb-spell" title={name}>
+      {url ? <img src={url} alt={name} /> : SPELL_FALLBACK[id]?.code ?? '·'}
+    </span>
+  )
+}
+
+function RuneCircle({ perkId, styleId, kind }: { perkId?: number | null; styleId: number | null; kind: 'key' | 'sec' }) {
+  const tree = styleId != null ? TREE_INFO[styleId] : undefined
+  const treeName = (styleId != null ? dd.styleName(styleId) : null) ?? tree?.name
+  const tone = tree?.tone ?? 'var(--text-faint)'
+  if (kind === 'key') {
+    const name = (perkId != null ? dd.runeName(perkId) ?? KEYSTONE_FALLBACK[perkId] : null) ?? 'Keystone'
+    const url = perkId != null ? dd.runeImgUrl(perkId) : null
+    return (
+      <span className="ck-rune ck-rune--key" title={treeName ? `${name} · ${treeName}` : name} style={{ background: tone }}>
+        {url ? <img src={url} alt={name} /> : code3(name)}
+      </span>
+    )
+  }
+  const name = treeName ?? 'Secondary'
+  const url = styleId != null ? dd.styleImgUrl(styleId) : null
+  return (
+    <span className="ck-rune ck-rune--sec" title={`${name} (secondary)`} style={{ border: `1.5px solid ${tone}`, color: tone }}>
+      {url ? <img src={url} alt={name} /> : code3(name)}
+    </span>
+  )
+}
+
+function ItemSlot({ id, trinket = false }: { id: number; trinket?: boolean }) {
+  const base = trinket ? 'ck-sb-trinket' : 'ck-sb-item'
+  if (!id) {
+    return <span className={`${base} ${trinket ? 'ck-sb-trinket--empty' : 'ck-sb-item--empty'}`} title="Empty slot" />
+  }
+  const name = dd.itemName(id)
+  const url = dd.itemImgUrl(id)
+  return (
+    <span className={trinket ? base : `${base} ck-sb-item--filled`} title={name ?? `Item ${id}`}>
+      {url ? <img src={url} alt={name ?? `Item ${id}`} /> : name ? code3(name) : ''}
+    </span>
+  )
+}
+
+function ScoreRow({ e, tone, teamKills, maxDmg, mvp }: {
+  e: RosterEntry; tone: string; teamKills: number; maxDmg: number; mvp: boolean
+}) {
+  const kdaRatio = ((e.kills + e.assists) / Math.max(1, e.deaths)).toFixed(2)
+  const kp = Math.round(((e.kills + e.assists) / Math.max(1, teamKills)) * 100)
+  const barPct = maxDmg > 0 ? Math.max(7, Math.round((e.damageToChampions / maxDmg) * 100)) : 0
+  return (
+    <div className={'ck-sb-row' + (e.isYou ? ' ck-sb-row--you' : '')}>
+      <div className="ck-sb-load">
+        <span className="ck-sb-portrait">
+          <ChampAvatar name={e.champion} size="md" shape="rounded" ring={e.isYou ? 'accent' : tone} />
+          {e.champLevel > 0 && <span className="ck-sb-level">{e.champLevel}</span>}
+        </span>
+        <span className="ck-sb-spells">
+          {e.summonerSpellIds.map((id, i) => <SpellIcon key={i} id={id} />)}
+        </span>
+        <span className="ck-sb-keys">
+          <RuneCircle perkId={e.keystoneId} styleId={e.primaryStyleId} kind="key" />
+          <RuneCircle styleId={e.subStyleId} kind="sec" />
+        </span>
+      </div>
+      <div className="ck-sb-who">
+        <div className="ck-sb-pname" style={e.isLaneOpponent ? { color: 'var(--data-enemy)' } : undefined}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.champion}</span>
+          {e.isYou && <span className="ck-mtag" style={{ color: 'var(--gold-400)' }}>YOU</span>}
+          {e.isLaneOpponent && <span className="ck-mtag" style={{ color: 'var(--data-enemy)' }}>LANE</span>}
+          {mvp && <span className="ck-sb-mvp">MVP</span>}
         </div>
-        <span />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, justifyContent: 'flex-end' }}>
-          <span className="eyebrow" style={{ fontSize: 11, color: 'var(--red-400)' }}>Enemy</span>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--data-enemy)', flex: 'none' }} />
+        <div className="ck-sb-sub">
+          {ROLE_ABBR[e.role] ?? e.role.toUpperCase()}{e.riotId ? ` · ${e.riotId}` : ''}
         </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {rows.map(({ a, e }, i) => (
-          <div key={i} style={{
-            display: 'grid', gridTemplateColumns: '1fr 56px 1fr', alignItems: 'center', gap: '0 12px',
-            padding: '6px 8px', borderRadius: 'var(--radius-md)',
-            background: a.isYou ? 'rgba(242,179,61,0.07)' : 'transparent',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              <ChampAvatar name={a.champion} size="sm" shape="rounded" ring={a.isYou ? 'accent' : 'var(--data-ally)'} />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {a.champion}
-                  {a.isYou && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--gold-400)', marginLeft: 7, letterSpacing: '0.04em' }}>YOU</span>}
-                </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{statLine(a)}</div>
-              </div>
-            </div>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: '0.08em', textAlign: 'center' }}>
-              {ROLE_ABBR[a.role] ?? a.role.toUpperCase()}
+      <div className="ck-sb-items">
+        {e.itemIds.map((id, i) => <ItemSlot key={i} id={id} />)}
+        <ItemSlot id={e.trinketId} trinket />
+      </div>
+      <div className="ck-sb-stat ck-sb-stat--kda">
+        <div className="ck-sb-line">{e.kills} / {e.deaths} / {e.assists}</div>
+        <div className="ck-sb-sub2">{kdaRatio} KDA</div>
+      </div>
+      <div className="ck-sb-stat ck-sb-stat--cs">
+        <div className="ck-sb-line">{e.cs} CS</div>
+        <div className="ck-sb-sub2">{kp}% KP</div>
+      </div>
+      <div className="ck-sb-stat ck-sb-stat--dmg">
+        <div className="ck-sb-line">{fmtDmg(e.damageToChampions)}</div>
+        <div className="ck-sb-bar"><span style={{ width: `${barPct}%`, background: tone }} /></div>
+      </div>
+    </div>
+  )
+}
+
+function TeamBlock({ title, side, rows, won, objectives, maxDmg, mvp }: {
+  title: string; side: 'ally' | 'enemy'; rows: RosterEntry[]; won: boolean
+  objectives: TeamObjectives | null; maxDmg: number; mvp: FramingOutput['mvp'] | null
+}) {
+  const tone = side === 'ally' ? 'var(--data-ally)' : 'var(--data-enemy)'
+  const tk = rows.reduce((s, e) => s + e.kills, 0)
+  const td = rows.reduce((s, e) => s + e.deaths, 0)
+  const ta = rows.reduce((s, e) => s + e.assists, 0)
+  const gold = rows.reduce((s, e) => s + e.gold, 0)
+  const dmg = rows.reduce((s, e) => s + e.damageToChampions, 0)
+  return (
+    <div className={`ck-sb-team ck-sb-team--${side}`}>
+      <div className="ck-sb-thead">
+        <span className={`ck-sb-res ck-sb-res--${won ? 'win' : 'loss'}`}>{won ? 'Victory' : 'Defeat'}</span>
+        <span className="ck-sb-tname" style={{ color: tone }}>{title}</span>
+        <span className="ck-sb-totals">
+          <span><b>{tk}</b> / <b>{td}</b> / <b>{ta}</b></span>
+          {objectives && (
+            <span className="ck-sb-obj">
+              <span title="Towers">T {objectives.towers}</span>
+              <span title="Dragons">D {objectives.dragons}</span>
+              <span title="Barons">B {objectives.barons}</span>
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end', minWidth: 0 }}>
-              <div style={{ minWidth: 0, textAlign: 'right' }}>
-                <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14, color: e?.isLaneOpponent ? 'var(--data-enemy)' : 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {e?.isLaneOpponent && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--data-enemy)', marginRight: 7, letterSpacing: '0.04em' }}>LANE</span>}
-                  {e?.champion ?? '—'}
-                </div>
-                {e && <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{statLine(e)}</div>}
-              </div>
-              {e && <ChampAvatar name={e.champion} size="sm" shape="rounded" ring="var(--data-enemy)" />}
-            </div>
-          </div>
+          )}
+          <span><b>{goldK(gold)}</b> gold</span>
+          {dmg > 0 && <span><b>{fmtDmg(dmg)}</b> dmg</span>}
+        </span>
+      </div>
+      <div className="ck-sb-rows">
+        {rows.map((e, i) => (
+          <ScoreRow key={i} e={e} tone={tone} teamKills={tk} maxDmg={maxDmg}
+            mvp={!!mvp && mvp.teamId === e.teamId && mvp.champion === e.champion} />
         ))}
       </div>
+    </div>
+  )
+}
+
+function Matchup({ matchup, win, mvp }: {
+  matchup: MatchupData; win: boolean; mvp: FramingOutput['mvp'] | null
+}) {
+  // Resolve item/spell/rune names + icons once per session; re-render when in.
+  const [, setDdLoaded] = useState(false)
+  useEffect(() => { ensureLoadoutDataLoaded().then(() => setDdLoaded(true)) }, [])
+
+  const maxDmg = Math.max(0, ...matchup.allies.map(e => e.damageToChampions), ...matchup.enemies.map(e => e.damageToChampions))
+  return (
+    <Card padding={0} className="ck-sb">
+      <TeamBlock title="Your team" side="ally" rows={matchup.allies} won={win}
+        objectives={matchup.allyObjectives} maxDmg={maxDmg} mvp={mvp} />
+      <TeamBlock title="Enemy team" side="enemy" rows={matchup.enemies} won={!win}
+        objectives={matchup.enemyObjectives} maxDmg={maxDmg} mvp={mvp} />
       {!matchup.laneOpponent && (
-        <div style={{ marginTop: 10, fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--text-faint)' }}>
+        <div className="ck-sb-note">
           No fixed lane opponent this game — your role roams rather than holding a single lane.
         </div>
       )}
@@ -572,7 +707,7 @@ export function CoachReport({ matchId, onAnalyzed }: {
       {/* Matchup — facts; tips are a framing decoration (pass 1). */}
       <section>
         <SectionLabel icon="swords">Matchup</SectionLabel>
-        <Matchup matchup={report.matchup} />
+        <Matchup matchup={report.matchup} win={core.win} mvp={framing?.mvp ?? null} />
         {framing && framing.matchupTips.length > 0 && (
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
             {framing.matchupTips.map((tip, i) => (

@@ -1,5 +1,5 @@
-import type { MatchCore, Matchup, RosterEntry } from '@shared/types'
-import { matchInfo, participants, round1, type RawParticipant } from './raw'
+import type { MatchCore, Matchup, RosterEntry, TeamObjectives } from '@shared/types'
+import { matchInfo, participants, round1, type RawParticipant, type RawTeam } from './raw'
 
 const ROLE_ORDER = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY']
 // Jungle isn't a lane — a jungler has no fixed lane opponent (FR-012).
@@ -62,6 +62,12 @@ export function resolveLaneOpponentId(rawMatch: unknown, puuid: string): number 
 }
 
 function toRosterEntry(p: RawParticipant, isYou: boolean, isLaneOpponent: boolean): RosterEntry {
+  // The rune page: styles[0] is the primary tree (its first selection is the
+  // keystone), styles[1] the secondary tree. Untrusted raw — every step guarded.
+  const styles = p.perks?.styles ?? []
+  const primary = styles.find((s) => s.description === 'primaryStyle') ?? styles[0]
+  const sub = styles.find((s) => s.description === 'subStyle') ?? styles[1]
+
   return {
     champion: p.championName ?? 'Unknown',
     role: roleLabel(p.teamPosition),
@@ -72,7 +78,25 @@ function toRosterEntry(p: RawParticipant, isYou: boolean, isLaneOpponent: boolea
     deaths: p.deaths ?? 0,
     assists: p.assists ?? 0,
     cs: (p.totalMinionsKilled ?? 0) + (p.neutralMinionsKilled ?? 0),
-    gold: p.goldEarned ?? 0
+    gold: p.goldEarned ?? 0,
+    champLevel: p.champLevel ?? 0,
+    damageToChampions: p.totalDamageDealtToChampions ?? 0,
+    riotId: p.riotIdGameName ?? '',
+    summonerSpellIds: [p.summoner1Id ?? 0, p.summoner2Id ?? 0],
+    keystoneId: primary?.selections?.[0]?.perk ?? null,
+    primaryStyleId: primary?.style ?? null,
+    subStyleId: sub?.style ?? null,
+    itemIds: [p.item0 ?? 0, p.item1 ?? 0, p.item2 ?? 0, p.item3 ?? 0, p.item4 ?? 0, p.item5 ?? 0],
+    trinketId: p.item6 ?? 0
+  }
+}
+
+function toObjectives(t: RawTeam | undefined): TeamObjectives | null {
+  if (!t?.objectives) return null
+  return {
+    towers: t.objectives.tower?.kills ?? 0,
+    dragons: t.objectives.dragon?.kills ?? 0,
+    barons: t.objectives.baron?.kills ?? 0
   }
 }
 
@@ -106,15 +130,15 @@ export function extractMatchup(rawMatch: unknown, puuid: string): Matchup {
     .sort(order)
     .map((p) => toRosterEntry(p, false, p === laneOppParticipant))
 
-  const youEntry =
-    allies.find((e) => e.isYou) ??
-    (you
-      ? toRosterEntry(you, true, false)
-      : { champion: 'Unknown', role: 'Unknown', teamId: youTeam, isYou: true, isLaneOpponent: false, kills: 0, deaths: 0, assists: 0, cs: 0, gold: 0 })
+  const youEntry = allies.find((e) => e.isYou) ?? toRosterEntry(you ?? {}, true, false)
 
   const laneOpponent = laneOppParticipant
     ? toRosterEntry(laneOppParticipant, false, true)
     : null
 
-  return { you: youEntry, laneOpponent, allies, enemies }
+  const teams = matchInfo(rawMatch).teams ?? []
+  const allyObjectives = toObjectives(teams.find((t) => t.teamId === youTeam))
+  const enemyObjectives = toObjectives(teams.find((t) => (t.teamId ?? 0) !== youTeam && t.teamId != null))
+
+  return { you: youEntry, laneOpponent, allies, enemies, allyObjectives, enemyObjectives }
 }

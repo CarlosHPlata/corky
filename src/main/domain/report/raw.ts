@@ -4,6 +4,12 @@
 /** Summoner's Rift world-coordinate extent (both axes run ~0..14870). */
 export const MAP_MAX = 14870
 
+export interface RawPerkStyle {
+  description?: string
+  style?: number
+  selections?: { perk?: number }[]
+}
+
 export interface RawParticipant {
   participantId?: number
   puuid?: string
@@ -19,6 +25,29 @@ export interface RawParticipant {
   goldEarned?: number
   visionScore?: number
   challenges?: { killParticipation?: number }
+  champLevel?: number
+  totalDamageDealtToChampions?: number
+  riotIdGameName?: string
+  summoner1Id?: number
+  summoner2Id?: number
+  item0?: number
+  item1?: number
+  item2?: number
+  item3?: number
+  item4?: number
+  item5?: number
+  item6?: number
+  perks?: { styles?: RawPerkStyle[] }
+}
+
+export interface RawTeam {
+  teamId?: number
+  win?: boolean
+  objectives?: {
+    tower?: { kills?: number }
+    dragon?: { kills?: number }
+    baron?: { kills?: number }
+  }
 }
 
 export interface RawMatch {
@@ -28,6 +57,7 @@ export interface RawMatch {
     gameCreation?: number
     gameDuration?: number
     participants?: RawParticipant[]
+    teams?: RawTeam[]
   }
 }
 

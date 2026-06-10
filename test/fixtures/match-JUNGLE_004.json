@@ -35,7 +35,37 @@
         "visionScore": 16,
         "challenges": {
           "killParticipation": 0.4
-        }
+        },
+        "riotIdGameName": "DemaciaNow",
+        "summoner1Id": 4,
+        "summoner2Id": 12,
+        "item0": 6631,
+        "item1": 3047,
+        "item2": 3053,
+        "item3": 3742,
+        "item4": 3065,
+        "item5": 0,
+        "item6": 3340,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8000,
+              "selections": [
+                {
+                  "perk": 8010
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8400,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 14,
+        "totalDamageDealtToChampions": 20000
       },
       {
         "participantId": 2,
@@ -53,7 +83,37 @@
         "visionScore": 28,
         "challenges": {
           "killParticipation": 0.62
-        }
+        },
+        "riotIdGameName": "Corky",
+        "summoner1Id": 4,
+        "summoner2Id": 11,
+        "item0": 6692,
+        "item1": 3047,
+        "item2": 3071,
+        "item3": 6610,
+        "item4": 3053,
+        "item5": 0,
+        "item6": 3364,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8000,
+              "selections": [
+                {
+                  "perk": 8010
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8100,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 18,
+        "totalDamageDealtToChampions": 25400
       },
       {
         "participantId": 3,
@@ -71,7 +131,37 @@
         "visionScore": 18,
         "challenges": {
           "killParticipation": 0.4
-        }
+        },
+        "riotIdGameName": "NineTails",
+        "summoner1Id": 4,
+        "summoner2Id": 12,
+        "item0": 6655,
+        "item1": 3020,
+        "item2": 4645,
+        "item3": 3089,
+        "item4": 3157,
+        "item5": 0,
+        "item6": 3340,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8100,
+              "selections": [
+                {
+                  "perk": 8112
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8300,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 15,
+        "totalDamageDealtToChampions": 23900
       },
       {
         "participantId": 4,
@@ -89,7 +179,37 @@
         "visionScore": 19,
         "challenges": {
           "killParticipation": 0.4
-        }
+        },
+        "riotIdGameName": "PowPow",
+        "summoner1Id": 4,
+        "summoner2Id": 7,
+        "item0": 6672,
+        "item1": 3006,
+        "item2": 3031,
+        "item3": 3085,
+        "item4": 3036,
+        "item5": 0,
+        "item6": 3363,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8000,
+              "selections": [
+                {
+                  "perk": 8008
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8100,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 18,
+        "totalDamageDealtToChampions": 19100
       },
       {
         "participantId": 5,
@@ -107,7 +227,37 @@
         "visionScore": 20,
         "challenges": {
           "killParticipation": 0.4
-        }
+        },
+        "riotIdGameName": "LanternBot",
+        "summoner1Id": 4,
+        "summoner2Id": 14,
+        "item0": 3190,
+        "item1": 3117,
+        "item2": 3109,
+        "item3": 3050,
+        "item4": 2055,
+        "item5": 0,
+        "item6": 3364,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8400,
+              "selections": [
+                {
+                  "perk": 8439
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8300,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 15,
+        "totalDamageDealtToChampions": 15900
       },
       {
         "participantId": 6,
@@ -125,7 +275,37 @@
         "visionScore": 21,
         "challenges": {
           "killParticipation": 0.4
-        }
+        },
+        "riotIdGameName": "TheBoss",
+        "summoner1Id": 4,
+        "summoner2Id": 12,
+        "item0": 3078,
+        "item1": 3047,
+        "item2": 3053,
+        "item3": 3742,
+        "item4": 3065,
+        "item5": 0,
+        "item6": 3340,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8000,
+              "selections": [
+                {
+                  "perk": 8010
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8400,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 13,
+        "totalDamageDealtToChampions": 20000
       },
       {
         "participantId": 7,
@@ -143,7 +323,37 @@
         "visionScore": 22,
         "challenges": {
           "killParticipation": 0.4
-        }
+        },
+        "riotIdGameName": "PiltoverFist",
+        "summoner1Id": 4,
+        "summoner2Id": 11,
+        "item0": 6692,
+        "item1": 3047,
+        "item2": 3071,
+        "item3": 3053,
+        "item4": 3026,
+        "item5": 0,
+        "item6": 3364,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8000,
+              "selections": [
+                {
+                  "perk": 8010
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8300,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 15,
+        "totalDamageDealtToChampions": 21800
       },
       {
         "participantId": 8,
@@ -161,7 +371,37 @@
         "visionScore": 23,
         "challenges": {
           "killParticipation": 0.4
-        }
+        },
+        "riotIdGameName": "ShadowMaster",
+        "summoner1Id": 4,
+        "summoner2Id": 14,
+        "item0": 6692,
+        "item1": 3158,
+        "item2": 3142,
+        "item3": 3814,
+        "item4": 6694,
+        "item5": 0,
+        "item6": 3340,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8100,
+              "selections": [
+                {
+                  "perk": 8112
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8000,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 13,
+        "totalDamageDealtToChampions": 23000
       },
       {
         "participantId": 9,
@@ -179,7 +419,37 @@
         "visionScore": 24,
         "challenges": {
           "killParticipation": 0.4
-        }
+        },
+        "riotIdGameName": "OnTheCase",
+        "summoner1Id": 4,
+        "summoner2Id": 7,
+        "item0": 6676,
+        "item1": 3006,
+        "item2": 3031,
+        "item3": 3036,
+        "item4": 3094,
+        "item5": 0,
+        "item6": 3363,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8000,
+              "selections": [
+                {
+                  "perk": 8021
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8200,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 17,
+        "totalDamageDealtToChampions": 19100
       },
       {
         "participantId": 10,
@@ -197,17 +467,69 @@
         "visionScore": 15,
         "challenges": {
           "killParticipation": 0.4
-        }
+        },
+        "riotIdGameName": "FinalSpark",
+        "summoner1Id": 4,
+        "summoner2Id": 14,
+        "item0": 6655,
+        "item1": 3020,
+        "item2": 4628,
+        "item3": 3157,
+        "item4": 2055,
+        "item5": 0,
+        "item6": 3364,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8200,
+              "selections": [
+                {
+                  "perk": 8229
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8300,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 14,
+        "totalDamageDealtToChampions": 15900
       }
     ],
     "teams": [
       {
         "teamId": 100,
-        "win": true
+        "win": true,
+        "objectives": {
+          "tower": {
+            "kills": 9
+          },
+          "dragon": {
+            "kills": 3
+          },
+          "baron": {
+            "kills": 1
+          }
+        }
       },
       {
         "teamId": 200,
-        "win": false
+        "win": false,
+        "objectives": {
+          "tower": {
+            "kills": 2
+          },
+          "dragon": {
+            "kills": 1
+          },
+          "baron": {
+            "kills": 0
+          }
+        }
       }
     ]
   }

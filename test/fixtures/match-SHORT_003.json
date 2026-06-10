@@ -32,7 +32,37 @@
         "totalMinionsKilled": 108,
         "neutralMinionsKilled": 0,
         "goldEarned": 7610,
-        "visionScore": 16
+        "visionScore": 16,
+        "riotIdGameName": "DemaciaNow",
+        "summoner1Id": 4,
+        "summoner2Id": 12,
+        "item0": 6631,
+        "item1": 3047,
+        "item2": 3053,
+        "item3": 0,
+        "item4": 0,
+        "item5": 0,
+        "item6": 3340,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8000,
+              "selections": [
+                {
+                  "perk": 8010
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8400,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 10,
+        "totalDamageDealtToChampions": 9000
       },
       {
         "participantId": 2,
@@ -47,7 +77,37 @@
         "totalMinionsKilled": 126,
         "neutralMinionsKilled": 36,
         "goldEarned": 7880,
-        "visionScore": 17
+        "visionScore": 17,
+        "riotIdGameName": "BlindMonk",
+        "summoner1Id": 4,
+        "summoner2Id": 11,
+        "item0": 6692,
+        "item1": 3047,
+        "item2": 3071,
+        "item3": 0,
+        "item4": 0,
+        "item5": 0,
+        "item6": 3364,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8000,
+              "selections": [
+                {
+                  "perk": 8010
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8100,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 12,
+        "totalDamageDealtToChampions": 9810
       },
       {
         "participantId": 3,
@@ -62,7 +122,37 @@
         "totalMinionsKilled": 144,
         "neutralMinionsKilled": 0,
         "goldEarned": 8960,
-        "visionScore": 28
+        "visionScore": 28,
+        "riotIdGameName": "Corky",
+        "summoner1Id": 4,
+        "summoner2Id": 12,
+        "item0": 6655,
+        "item1": 3020,
+        "item2": 4645,
+        "item3": 0,
+        "item4": 0,
+        "item5": 0,
+        "item6": 3340,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8100,
+              "selections": [
+                {
+                  "perk": 8112
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8300,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 11,
+        "totalDamageDealtToChampions": 12780
       },
       {
         "participantId": 4,
@@ -77,7 +167,37 @@
         "totalMinionsKilled": 90,
         "neutralMinionsKilled": 0,
         "goldEarned": 7340,
-        "visionScore": 19
+        "visionScore": 19,
+        "riotIdGameName": "PowPow",
+        "summoner1Id": 4,
+        "summoner2Id": 7,
+        "item0": 6672,
+        "item1": 3006,
+        "item2": 3031,
+        "item3": 0,
+        "item4": 0,
+        "item5": 0,
+        "item6": 3363,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8000,
+              "selections": [
+                {
+                  "perk": 8008
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8100,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 14,
+        "totalDamageDealtToChampions": 8595
       },
       {
         "participantId": 5,
@@ -92,7 +212,37 @@
         "totalMinionsKilled": 108,
         "neutralMinionsKilled": 0,
         "goldEarned": 7610,
-        "visionScore": 20
+        "visionScore": 20,
+        "riotIdGameName": "LanternBot",
+        "summoner1Id": 4,
+        "summoner2Id": 14,
+        "item0": 3190,
+        "item1": 3117,
+        "item2": 3109,
+        "item3": 0,
+        "item4": 0,
+        "item5": 0,
+        "item6": 3364,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8400,
+              "selections": [
+                {
+                  "perk": 8439
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8300,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 11,
+        "totalDamageDealtToChampions": 7155
       },
       {
         "participantId": 6,
@@ -107,7 +257,37 @@
         "totalMinionsKilled": 126,
         "neutralMinionsKilled": 0,
         "goldEarned": 7880,
-        "visionScore": 21
+        "visionScore": 21,
+        "riotIdGameName": "TheBoss",
+        "summoner1Id": 4,
+        "summoner2Id": 12,
+        "item0": 3078,
+        "item1": 3047,
+        "item2": 3053,
+        "item3": 0,
+        "item4": 0,
+        "item5": 0,
+        "item6": 3340,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8000,
+              "selections": [
+                {
+                  "perk": 8010
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8400,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 9,
+        "totalDamageDealtToChampions": 9000
       },
       {
         "participantId": 7,
@@ -122,7 +302,37 @@
         "totalMinionsKilled": 144,
         "neutralMinionsKilled": 36,
         "goldEarned": 8150,
-        "visionScore": 22
+        "visionScore": 22,
+        "riotIdGameName": "PiltoverFist",
+        "summoner1Id": 4,
+        "summoner2Id": 11,
+        "item0": 6692,
+        "item1": 3047,
+        "item2": 3071,
+        "item3": 0,
+        "item4": 0,
+        "item5": 0,
+        "item6": 3364,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8000,
+              "selections": [
+                {
+                  "perk": 8010
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8300,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 11,
+        "totalDamageDealtToChampions": 9810
       },
       {
         "participantId": 8,
@@ -137,7 +347,37 @@
         "totalMinionsKilled": 90,
         "neutralMinionsKilled": 0,
         "goldEarned": 7340,
-        "visionScore": 23
+        "visionScore": 23,
+        "riotIdGameName": "ShadowMaster",
+        "summoner1Id": 4,
+        "summoner2Id": 14,
+        "item0": 6692,
+        "item1": 3158,
+        "item2": 3142,
+        "item3": 0,
+        "item4": 0,
+        "item5": 0,
+        "item6": 3340,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8100,
+              "selections": [
+                {
+                  "perk": 8112
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8000,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 9,
+        "totalDamageDealtToChampions": 10350
       },
       {
         "participantId": 9,
@@ -152,7 +392,37 @@
         "totalMinionsKilled": 108,
         "neutralMinionsKilled": 0,
         "goldEarned": 7610,
-        "visionScore": 24
+        "visionScore": 24,
+        "riotIdGameName": "OnTheCase",
+        "summoner1Id": 4,
+        "summoner2Id": 7,
+        "item0": 6676,
+        "item1": 3006,
+        "item2": 3031,
+        "item3": 0,
+        "item4": 0,
+        "item5": 0,
+        "item6": 3363,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8000,
+              "selections": [
+                {
+                  "perk": 8021
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8200,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 13,
+        "totalDamageDealtToChampions": 8595
       },
       {
         "participantId": 10,
@@ -167,17 +437,69 @@
         "totalMinionsKilled": 126,
         "neutralMinionsKilled": 0,
         "goldEarned": 7880,
-        "visionScore": 15
+        "visionScore": 15,
+        "riotIdGameName": "FinalSpark",
+        "summoner1Id": 4,
+        "summoner2Id": 14,
+        "item0": 6655,
+        "item1": 3020,
+        "item2": 4628,
+        "item3": 0,
+        "item4": 0,
+        "item5": 0,
+        "item6": 3364,
+        "perks": {
+          "styles": [
+            {
+              "description": "primaryStyle",
+              "style": 8200,
+              "selections": [
+                {
+                  "perk": 8229
+                }
+              ]
+            },
+            {
+              "description": "subStyle",
+              "style": 8300,
+              "selections": []
+            }
+          ]
+        },
+        "champLevel": 10,
+        "totalDamageDealtToChampions": 7155
       }
     ],
     "teams": [
       {
         "teamId": 100,
-        "win": true
+        "win": true,
+        "objectives": {
+          "tower": {
+            "kills": 4
+          },
+          "dragon": {
+            "kills": 1
+          },
+          "baron": {
+            "kills": 0
+          }
+        }
       },
       {
         "teamId": 200,
-        "win": false
+        "win": false,
+        "objectives": {
+          "tower": {
+            "kills": 0
+          },
+          "dragon": {
+            "kills": 0
+          },
+          "baron": {
+            "kills": 0
+          }
+        }
       }
     ]
   }

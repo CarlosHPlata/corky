@@ -60,4 +60,60 @@ describe('extractMatchup', () => {
     expect(mu.laneOpponent).toBeNull()
     expect(mu.enemies.every((e) => !e.isLaneOpponent)).toBe(true)
   })
+
+  it('carries each player\'s loadout: spells, runes, 6 item slots and trinket', () => {
+    const mu = extractMatchup(loadMatch('WIN_001'), PLAYER_PUUID)
+    const you = mu.you
+    expect(you.summonerSpellIds).toEqual([4, 12]) // Flash + Teleport
+    expect(you.keystoneId).toBe(8112) // Electrocute
+    expect(you.primaryStyleId).toBe(8100) // Domination
+    expect(you.subStyleId).toBe(8300) // Inspiration
+    expect(you.itemIds).toHaveLength(6)
+    expect(you.itemIds.every((id) => id > 0)).toBe(true) // full build
+    expect(you.trinketId).toBe(3340)
+    expect(you.champLevel).toBe(18)
+    expect(you.damageToChampions).toBeGreaterThan(0)
+    expect(you.riotId).toBe('Corky')
+    // every roster entry has exactly 6 item slots and two spell ids
+    for (const e of [...mu.allies, ...mu.enemies]) {
+      expect(e.itemIds).toHaveLength(6)
+      expect(e.summonerSpellIds).toHaveLength(2)
+      expect(e.champLevel).toBeGreaterThan(0)
+    }
+  })
+
+  it('keeps unfilled item slots as 0 rather than dropping them', () => {
+    const mu = extractMatchup(loadMatch('SHORT_003'), PLAYER_PUUID)
+    // a short game ends on a partial build — trailing slots stay empty
+    expect(mu.you.itemIds.filter((id) => id > 0).length).toBeLessThan(6)
+    expect(mu.you.itemIds).toHaveLength(6)
+  })
+
+  it('extracts per-team objective tallies for the scoreboard header', () => {
+    const mu = extractMatchup(loadMatch('WIN_001'), PLAYER_PUUID)
+    expect(mu.allyObjectives).toEqual({ towers: 9, dragons: 3, barons: 1 })
+    expect(mu.enemyObjectives).toEqual({ towers: 2, dragons: 1, barons: 0 })
+  })
+
+  it('defaults loadout fields safely when the raw JSON lacks them', () => {
+    const stripped = {
+      info: {
+        participants: [
+          { participantId: 1, puuid: PLAYER_PUUID, teamId: 100, teamPosition: 'MIDDLE', championName: 'Ahri' },
+          { participantId: 6, teamId: 200, teamPosition: 'MIDDLE', championName: 'Zed' }
+        ]
+      }
+    }
+    const mu = extractMatchup(stripped, PLAYER_PUUID)
+    expect(mu.you.itemIds).toEqual([0, 0, 0, 0, 0, 0])
+    expect(mu.you.trinketId).toBe(0)
+    expect(mu.you.summonerSpellIds).toEqual([0, 0])
+    expect(mu.you.keystoneId).toBeNull()
+    expect(mu.you.primaryStyleId).toBeNull()
+    expect(mu.you.subStyleId).toBeNull()
+    expect(mu.you.champLevel).toBe(0)
+    expect(mu.you.riotId).toBe('')
+    expect(mu.allyObjectives).toBeNull()
+    expect(mu.enemyObjectives).toBeNull()
+  })
 })
