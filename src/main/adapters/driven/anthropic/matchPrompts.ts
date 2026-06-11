@@ -78,20 +78,18 @@ export const SUBMIT_REVIEW = {
   name: 'submit_review',
   description:
     'Return the overall review: a blunt prose verdict on why the game was won or lost, plus the structured claims behind it. Annotate only the facts in the context — never invent a number or a marker.',
+  // The schema is deliberately FLAT (verdictLead/verdictGild, claims with
+  // refId/refKind instead of a nested ref object): Opus has been observed
+  // falling back to its legacy XML <parameter> tool syntax on nested object
+  // schemas, which the API returns as fragmented tool_use blocks that fail
+  // parseReview. parseReview folds the flat fields back into ReviewOutput.
   input_schema: {
     type: 'object' as const,
     additionalProperties: false,
-    required: ['verdict', 'improve', 'claims', 'cohort', 'benchmarkBasis', 'confidence'],
+    required: ['verdictLead', 'verdictGild', 'improve', 'claims', 'cohort', 'benchmarkBasis', 'confidence'],
     properties: {
-      verdict: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['lead', 'gild'],
-        properties: {
-          lead: { type: 'string', description: 'First sentence — the single decisive decision/pattern that won or lost the game.' },
-          gild: { type: 'string', description: 'A short second clause that sharpens it. May be empty.' }
-        }
-      },
+      verdictLead: { type: 'string', description: 'Verdict, first sentence — the single decisive decision/pattern that won or lost the game.' },
+      verdictGild: { type: 'string', description: 'Verdict, a short second clause that sharpens it. May be empty.' },
       improve: { type: 'string', description: 'One or two sentences on the single most important thing to change next game.' },
       claims: {
         type: 'array',
@@ -100,19 +98,12 @@ export const SUBMIT_REVIEW = {
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['text', 'ref'],
+          required: ['text', 'refId', 'refKind'],
           properties: {
             text: { type: 'string' },
-            ref: {
-              type: 'object',
-              additionalProperties: false,
-              required: ['id', 'kind'],
-              properties: {
-                id: { type: 'string', description: 'An anchor id from the context, e.g. "stat:gold_at_24" or "marker:objective#2".' },
-                kind: { type: 'string', enum: ['stat', 'marker', 'benchmark', 'note'] },
-                label: { type: 'string' }
-              }
-            }
+            refId: { type: 'string', description: 'An anchor id from the context, e.g. "stat:gold_at_24" or "marker:objective#2".' },
+            refKind: { type: 'string', enum: ['stat', 'marker', 'benchmark', 'note'] },
+            refLabel: { type: 'string' }
           }
         }
       },
@@ -128,7 +119,7 @@ const REVIEW_SCAFFOLD = `You are reviewing ONE of the player's League of Legends
 Your job: (1) in one or two sentences of prose, name the single most important decision or pattern behind this win or loss — the thing that actually mattered; (2) in "improve", say in one or two sentences the single most important thing to change next game; (3) list the structured claims it rests on, each citing an anchor id from the context.
 
 Output contract (locked):
-- Annotate only the facts in the context. NEVER invent a number, a benchmark, or a timeline marker. Every claim's "ref.id" MUST be an id that appears in the context (a STAT or MARK line), unless its kind is "benchmark" or "note".
+- Annotate only the facts in the context. NEVER invent a number, a benchmark, or a timeline marker. Every claim's "refId" MUST be an id that appears in the context (a STAT or MARK line), unless its "refKind" is "benchmark" or "note".
 - When you cite a rate (CS/min, deaths) against the benchmark, set benchmarkBasis to the basis in the BENCH line; if there is no BENCH line use "general".
 - The player's goal/notes (NOTE lines) are their stated intent — never present them as your own evidence and never invent a figure to fit them.
 - If the data can't support a firm conclusion (no timeline, a remake, a very short game), set confidence to "provisional".`
@@ -161,18 +152,18 @@ export function parseReview(input: unknown): ReviewOutput {
   if (!input || typeof input !== 'object') throw new Error('Review model returned no payload')
   const o = input as Record<string, unknown>
 
-  const v = o.verdict as Record<string, unknown> | undefined
-  const lead = nonEmpty(v?.lead)
+  const lead = nonEmpty(o.verdictLead)
   if (!lead) throw new Error('Review is missing a verdict lead')
-  const gild = typeof v?.gild === 'string' ? v.gild.trim() : ''
+  const gild = typeof o.verdictGild === 'string' ? o.verdictGild.trim() : ''
   const improve = typeof o.improve === 'string' ? o.improve.trim() : ''
 
   const rawClaims = Array.isArray(o.claims) ? o.claims : []
   const claims: ReviewClaim[] = []
   for (const rc of rawClaims) {
     if (!rc || typeof rc !== 'object') continue
-    const text = nonEmpty((rc as Record<string, unknown>).text)
-    const ref = parseRef((rc as Record<string, unknown>).ref)
+    const c = rc as Record<string, unknown>
+    const text = nonEmpty(c.text)
+    const ref = parseRef({ id: c.refId, kind: c.refKind, label: c.refLabel })
     if (text && ref) claims.push({ text, ref })
   }
 
@@ -714,7 +705,7 @@ export function parseProposalPayload(toolName: string, input: unknown): RawPropo
 // materially improve the answer. The command executes them; the model never
 // fetches anything itself (Constitution II).
 
-const DISCOVERY_KINDS = new Set(['memory', 'history', 'benchmark'])
+const DISCOVERY_KINDS = new Set(['memory', 'history', 'benchmark', 'champion_build', 'lane_matchup'])
 const MAX_DISCOVERY_REQUESTS = 5
 
 export const SUBMIT_PLAN = {
@@ -735,7 +726,12 @@ export const SUBMIT_PLAN = {
           additionalProperties: false,
           required: ['kind'],
           properties: {
-            kind: { type: 'string', enum: ['memory', 'history', 'benchmark'] },
+            kind: {
+              type: 'string',
+              enum: ['memory', 'history', 'benchmark', 'champion_build', 'lane_matchup'],
+              description:
+                '"memory": player coaching history; "history": past game stats; "benchmark": meta CS/win-rate; "champion_build": current optimal build + runes; "lane_matchup": matchup guide vs lane opponent.'
+            },
             query: { type: 'string', description: 'Short free-text search hint — only meaningful for kind "memory".' }
           }
         }
@@ -746,10 +742,17 @@ export const SUBMIT_PLAN = {
 
 const DISCOVERY_SCAFFOLD = `You are the planning step for a League of Legends coach answering ONE player question. Call submit_plan.
 
-You get the question and an INVENTORY line of what is available: "memory" (durable coaching facts about this player; takes an optional free-text query), "history" (the player's own past games as a comparison cohort), "benchmark" (the public meta reference for this champion/role).
+You get the question and an INVENTORY line. Available fetch kinds:
+- "memory": durable coaching facts about this player (takes optional free-text query)
+- "history": the player's past game stats for this champion/role
+- "benchmark": OP.GG meta CS/win-rate reference for this champion/role
+- "champion_build": OP.GG current optimal build, runes and skill order — use when the question is about items, runes or build choices
+- "lane_matchup": OP.GG matchup guide vs the lane opponent — use when the question is about the specific matchup, counter-play or how to beat the enemy champ (inventory shows the opponent name)
 
 Output contract (locked):
-- Request only kinds the inventory lists. Never request a source the inventory shows as empty or off.
+- Request only kinds the inventory lists. Never request a source the inventory shows as "off".
+- Prefer "champion_build" over "benchmark" when the question is about build or runes.
+- Prefer "lane_matchup" when the question is about the enemy laner or the specific matchup.
 - At most 5 requests; an empty list is a valid answer.`
 
 export function buildDiscoveryPrompt(

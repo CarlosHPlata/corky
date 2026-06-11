@@ -1,4 +1,5 @@
-import type { MatchReport, MatchAnalysis } from '@shared/types'
+import type { MatchReport, MatchAnalysis, RosterEntry } from '@shared/types'
+import { summonerSpellName, keystoneName, runeTreeName } from './loadoutGlossary'
 
 // Pure briefing builder for the post-game coaching chat (spec 004). Mirrors the
 // design prototype's `buildBriefing`: a compact, factual brief so Corky coaches
@@ -30,7 +31,8 @@ function clock(durationSec: number): string {
 export function buildCoachBriefing(
   report: MatchReport,
   analysis: MatchAnalysis | null,
-  goal?: string
+  goal?: string,
+  itemNames?: ReadonlyMap<number, string> | null
 ): string {
   const c = report.core
   const facts: string[] = []
@@ -64,6 +66,50 @@ export function buildCoachBriefing(
   const tasks = analysis?.tasks?.standing ?? []
   if (tasks.length) {
     facts.push('Standing focus tasks: ' + tasks.map((t) => t.description).join('; '))
+  }
+
+  // Team matchup. Loadout facts are rendered as WORDS — the model coaches off
+  // names, not Riot's numeric ids. Spells/keystone/trees resolve from the
+  // static glossary; item names from the caller-supplied Data Dragon catalog
+  // (absent offline, in which case the items line degrades to annotated ids).
+  const mu = report.matchup
+  if (mu) {
+    if (mu.laneOpponent) {
+      const o = mu.laneOpponent
+      facts.push(`Lane opponent: ${o.champion} — ${o.kills}/${o.deaths}/${o.assists} KDA, ${o.cs} CS`)
+    }
+    const fmtEntry = (e: RosterEntry): string =>
+      e.isYou ? `${e.champion}/${e.role}[YOU]` : e.isLaneOpponent ? `${e.champion}/${e.role}[OPP]` : `${e.champion}/${e.role}`
+    if (mu.allies.length) facts.push(`Your team: ${mu.allies.map(fmtEntry).join(' · ')}`)
+    if (mu.enemies.length) facts.push(`Enemy team: ${mu.enemies.map(fmtEntry).join(' · ')}`)
+
+    const spells = mu.you.summonerSpellIds
+      .filter((id) => id > 0)
+      .map((id) => summonerSpellName(id) ?? `spell ${id}`)
+    if (spells.length) facts.push(`Your summoner spells: ${spells.join(' + ')}`)
+
+    const items = mu.you.itemIds.filter((id) => id > 0)
+    if (items.length) {
+      if (itemNames) {
+        const named = items.map((id) => itemNames.get(id) ?? `unknown item ${id}`)
+        const trinket = mu.you.trinketId > 0 ? itemNames.get(mu.you.trinketId) : null
+        facts.push(`Your items: ${named.join(', ')}${trinket ? ` · trinket: ${trinket}` : ''}`)
+      } else {
+        facts.push(`Your items (Riot item IDs): ${items.join(', ')}`)
+      }
+    }
+
+    const runeParts: string[] = []
+    if (mu.you.keystoneId) {
+      runeParts.push(`keystone ${keystoneName(mu.you.keystoneId) ?? `id ${mu.you.keystoneId}`}`)
+    }
+    if (mu.you.primaryStyleId) {
+      runeParts.push(`${runeTreeName(mu.you.primaryStyleId) ?? `tree id ${mu.you.primaryStyleId}`} primary`)
+    }
+    if (mu.you.subStyleId) {
+      runeParts.push(`${runeTreeName(mu.you.subStyleId) ?? `tree id ${mu.you.subStyleId}`} secondary`)
+    }
+    if (runeParts.length) facts.push(`Your runes: ${runeParts.join(', ')}`)
   }
 
   const lines = [

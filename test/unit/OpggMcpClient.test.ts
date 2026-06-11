@@ -63,4 +63,23 @@ describe('OpggMcpClient', () => {
     await client.getLaneMeta()
     expect(raw).toHaveBeenCalledTimes(1)
   })
+
+  it('reports every MCP tool call on the event bus — miss then hit, with a raw preview', async () => {
+    const { eventBus } = await import('../../src/main/application/events/EventBus')
+    const events: { cache?: string; method?: string; ok?: boolean; preview?: string }[] = []
+    const collect = (e: object): void => void events.push(e)
+    eventBus.on('telemetry.outbound', collect)
+    try {
+      const raw: RawToolCall = vi.fn().mockResolvedValue(laneFixture)
+      const client = new OpggMcpClient(raw)
+      await client.getLaneMeta()
+      await client.getLaneMeta()
+    } finally {
+      eventBus.off('telemetry.outbound', collect)
+    }
+    expect(events).toHaveLength(2)
+    expect(events[0]).toMatchObject({ method: 'lol_list_lane_meta_champions', cache: 'miss', ok: true })
+    expect(events[0].preview).toBeTruthy()
+    expect(events[1]).toMatchObject({ cache: 'hit', ok: true })
+  })
 })

@@ -6,8 +6,10 @@ import type { SessionGoalRepository } from '../ports/SessionGoalRepository'
 import type { MatchCoachingModel, DiscoveryRequest, AgenticChatExtras } from '../ports/MatchCoachingModel'
 import type { SemanticMemory } from '../ports/SemanticMemory'
 import type { BenchmarkDataSource } from '../ports/BenchmarkDataSource'
+import type { ChampionInsightsDataSource } from '../ports/ChampionInsightsDataSource'
 import type { CoachingConfigRepository } from '../ports/CoachingConfigRepository'
 import type { ReflectionRepository } from '../ports/ReflectionRepository'
+import type { ItemCatalog } from '../ports/ItemCatalog'
 import type { GetHistoryAggregates } from '../queries/GetHistoryAggregates'
 import type { SemanticObject } from '../../domain/memory/semanticObject'
 import { assembleMatchReport } from '../../domain/report/assembleMatchReport'
@@ -15,6 +17,7 @@ import { buildCoachBriefing } from '../../domain/report/coachBriefing'
 import { makeRefLineRenderer } from '../../domain/report/resolveChatRefs'
 import { buildAnchorCatalog } from '../../domain/report/anchorCatalog'
 import { resolveConfig } from '../../domain/config/coachingConfig'
+import { eventBus } from '../events/EventBus'
 import { renderHistoryBlock } from '../../domain/history/cohortAggregates'
 import { METRIC_KEYS } from '../../domain/report/metricRegistry'
 import {
@@ -27,7 +30,9 @@ import {
 const SOURCE_FOR_KIND: Record<DiscoveryRequest['kind'], string> = {
   memory: 'local-som',
   history: 'local-history',
-  benchmark: 'opgg-mcp'
+  benchmark: 'opgg-mcp',
+  champion_build: 'opgg-mcp',
+  lane_matchup: 'opgg-mcp'
 }
 
 /**
@@ -52,8 +57,10 @@ export class CoachChat {
     private readonly semanticMemory: SemanticMemory,
     private readonly getHistoryAggregates: GetHistoryAggregates,
     private readonly benchmarkSource: BenchmarkDataSource,
+    private readonly insightsSource: ChampionInsightsDataSource,
     private readonly coachingConfigRepo: CoachingConfigRepository,
     private readonly reflectionRepo: ReflectionRepository,
+    private readonly itemCatalog: ItemCatalog,
     private readonly model: MatchCoachingModel,
     private readonly chatModel: string,
     private readonly now: () => number = () => Date.now()
@@ -67,7 +74,8 @@ export class CoachChat {
     const goal = this.goalRepo.get()?.goal?.trim() || undefined
     const standing = this.reportRepo.getStandingTasks(account.puuid)
     const reflections = this.reflectionRepo.list(matchId)
-    let briefing = buildCoachBriefing(report, analysis, goal)
+    const itemNames = await this.itemCatalog.getItemNames() // null offline → id fallback
+    let briefing = buildCoachBriefing(report, analysis, goal, itemNames)
 
     const dossier = await this.runDiscovery(account.puuid, matchId, report, messages)
     if (dossier.length) {
@@ -142,9 +150,16 @@ export class CoachChat {
 
     let requests: DiscoveryRequest[]
     try {
-      const plan = await this.model.planDiscovery(question, this.buildInventory(puuid, config), this.chatModel)
+      const plan = await this.model.planDiscovery(question, this.buildInventory(puuid, config, report), this.chatModel)
       requests = plan.requests
-    } catch {
+      eventBus.emit({ type: 'telemetry.discovery.plan', question, requests })
+    } catch (e) {
+      eventBus.emit({
+        type: 'telemetry.discovery.plan',
+        question,
+        requests: [],
+        error: e instanceof Error ? e.message : String(e)
+      })
       return [] // the chat must never break because discovery did
     }
 
@@ -152,13 +167,27 @@ export class CoachChat {
     const cap = config.budgetTier === 'deep' ? 5 : 3
     const honored = requests.filter((r) => enabled.has(SOURCE_FOR_KIND[r.kind])).slice(0, cap)
 
-    const lines = await Promise.all(honored.map((r) => this.fetchRequest(r, puuid, matchId, report)))
+    // Each fetch reports what it went for and what actually came back — the
+    // dossier lines below ARE what the coach model will see.
+    const lines = await Promise.all(
+      honored.map(async (r) => {
+        const out = await this.fetchRequest(r, puuid, matchId, report)
+        eventBus.emit({
+          type: 'telemetry.discovery.fetch',
+          kind: r.kind,
+          source: SOURCE_FOR_KIND[r.kind],
+          ok: out.length > 0,
+          lines: out
+        })
+        return out
+      })
+    )
     return lines.flat()
   }
 
   /** One-line inventory of what discovery could fetch, from cheap local counts.
    * Each count is individually guarded — an unavailable store reads as 0. */
-  private buildInventory(puuid: string, config: ResolvedCoachingConfig): string {
+  private buildInventory(puuid: string, config: ResolvedCoachingConfig, report: MatchReport): string {
     const count = (read: () => number): number => {
       try {
         return read()
@@ -171,10 +200,12 @@ export class CoachChat {
     )
     const history = count(() => this.matchRepo.countMatches(puuid))
     const tasks = count(() => this.reportRepo.getStandingTasks(puuid).length)
-    const benchmark = config.sources.some((s) => s.id === SOURCE_FOR_KIND.benchmark && s.enabled)
-      ? 'available'
-      : 'off'
-    return `INVENTORY memory=${memory} history=${history} benchmark=${benchmark} tasks=${tasks}`
+    const opggOn = config.sources.some((s) => s.id === SOURCE_FOR_KIND.benchmark && s.enabled)
+    const benchmark = opggOn ? 'available' : 'off'
+    const championBuild = opggOn ? 'available' : 'off'
+    const laneOpponent = report.matchup?.laneOpponent?.champion
+    const laneMatchup = opggOn && laneOpponent ? `available(${laneOpponent})` : 'off'
+    return `INVENTORY memory=${memory} history=${history} benchmark=${benchmark} champion_build=${championBuild} lane_matchup=${laneMatchup} tasks=${tasks}`
   }
 
   /** Execute one honored request and render its dossier lines. A failed or empty
@@ -200,17 +231,51 @@ export class CoachChat {
         const agg = this.getHistoryAggregates.execute({ ...target, excludeMatchId: matchId })
         return agg ? [renderHistoryBlock(agg, target)] : []
       }
-      // benchmark — same BENCH line grammar as the analysis context (contextBlocks).
-      const bench = await this.benchmarkSource.getChampionBenchmark({
+      if (request.kind === 'benchmark') {
+        const bench = await this.benchmarkSource.getChampionBenchmark({
+          champion: report.core.champion,
+          role: report.core.role,
+          tier: null
+        })
+        return bench
+          ? [`BENCH cs_per_min basis=${bench.basis} ref=${bench.csPerMin}${bench.patch ? ` patch=${bench.patch}` : ''}`]
+          : []
+      }
+
+      if (request.kind === 'champion_build') {
+        const build = await this.insightsSource.getChampionBuild({
+          champion: report.core.champion,
+          role: report.core.role
+        })
+        if (!build) return []
+        const parts = [
+          `BUILD champ=${build.champion} pos=${build.position}`,
+          build.patch ? `patch=${build.patch}` : '',
+          `keystone="${build.keystone}"`,
+          build.primaryTree ? `tree="${build.primaryTree}${build.secondaryTree ? `→${build.secondaryTree}` : ''}"` : '',
+          build.coreItems.length ? `core="${build.coreItems.join(', ')}"` : '',
+          build.startItems.length ? `start="${build.startItems.join(', ')}"` : '',
+          build.summonerSpells?.length ? `spells="${build.summonerSpells.join(', ')}"` : '',
+          build.skillOrder ? `skills="${build.skillOrder}"` : ''
+        ].filter(Boolean)
+        return [parts.join(' ')]
+      }
+
+      // lane_matchup — only useful when there is a lane opponent.
+      const opponent = report.matchup?.laneOpponent?.champion
+      if (!opponent) return []
+      const matchup = await this.insightsSource.getLaneMatchup({
         champion: report.core.champion,
         role: report.core.role,
-        tier: null
+        opponent
       })
-      return bench
-        ? [
-            `BENCH cs_per_min basis=${bench.basis} ref=${bench.csPerMin}${bench.patch ? ` patch=${bench.patch}` : ''}`
-          ]
-        : []
+      if (!matchup) return []
+      const lines: string[] = [
+        `MATCHUP ${matchup.champion} vs ${matchup.opponent} ${matchup.position}${matchup.difficulty ? ` difficulty=${matchup.difficulty}` : ''}`
+      ]
+      for (const tip of matchup.tips) lines.push(`TIP "${tip}"`)
+      if (matchup.counterItems?.length) lines.push(`COUNTER_ITEM "${matchup.counterItems.join('", "')}"`)
+      return lines
     } catch {
       return []
     }

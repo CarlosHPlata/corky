@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
 import { closeDatabase } from './infrastructure/database'
 import { buildContainer } from './infrastructure/container'
+import { registerTelemetryConsoleLogger } from './infrastructure/telemetryLogger'
 import { registerIpcHandlers } from './adapters/driving/IpcController'
 
 function createWindow(): void {
@@ -31,6 +32,9 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   try {
+    // Subscribe the console observer BEFORE the container wires the observed
+    // proxies, so even initialisation-time calls are visible.
+    registerTelemetryConsoleLogger()
     const container = buildContainer()
     registerIpcHandlers(container)
   } catch (err) {

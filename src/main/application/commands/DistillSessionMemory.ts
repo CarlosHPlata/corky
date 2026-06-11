@@ -4,6 +4,7 @@ import type { ReportRepository } from '../ports/ReportRepository'
 import type { SessionGoalRepository } from '../ports/SessionGoalRepository'
 import type { ChatSessionRepository } from '../ports/ChatSessionRepository'
 import type { SemanticMemory } from '../ports/SemanticMemory'
+import type { ItemCatalog } from '../ports/ItemCatalog'
 import type { MatchCoachingModel, ExistingMemoryEntry } from '../ports/MatchCoachingModel'
 import { assembleMatchReport } from '../../domain/report/assembleMatchReport'
 import { buildCoachBriefing } from '../../domain/report/coachBriefing'
@@ -25,6 +26,7 @@ export class DistillSessionMemory {
     private readonly goalRepo: SessionGoalRepository,
     private readonly sessions: ChatSessionRepository,
     private readonly semanticMemory: SemanticMemory,
+    private readonly itemCatalog: ItemCatalog,
     private readonly model: MatchCoachingModel,
     private readonly chatModel: string,
     private readonly now: () => number = () => Date.now()
@@ -39,7 +41,8 @@ export class DistillSessionMemory {
     const report = this.loadReport(matchId, account.puuid)
     const analysis = this.reportRepo.getMatchAnalysis(matchId)
     const goal = this.goalRepo.get()?.goal?.trim() || undefined
-    const briefing = buildCoachBriefing(report, analysis, goal)
+    const itemNames = await this.itemCatalog.getItemNames() // null offline → id fallback
+    const briefing = buildCoachBriefing(report, analysis, goal, itemNames)
 
     const existing = this.semanticMemory.query({
       puuid: account.puuid,

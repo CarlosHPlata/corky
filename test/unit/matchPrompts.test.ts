@@ -13,11 +13,12 @@ import {
 import type { ReviewExtras } from '../../src/main/application/ports/MatchCoachingModel'
 
 const validReview = {
-  verdict: { lead: 'Even until 24, then you threw it.', gild: 'Two solo river deaths before Baron.' },
+  verdictLead: 'Even until 24, then you threw it.',
+  verdictGild: 'Two solo river deaths before Baron.',
   improve: 'Recall on the lead and group by 24:00.',
   claims: [
-    { text: 'You were +310 at 14 but −1240 by 24.', ref: { id: 'stat:gold_at_24', kind: 'marker' } },
-    { text: 'Two solo deaths gave up the swing.', ref: { id: 'stat:solo_deaths', kind: 'stat' } }
+    { text: 'You were +310 at 14 but −1240 by 24.', refId: 'stat:gold_at_24', refKind: 'marker' },
+    { text: 'Two solo deaths gave up the swing.', refId: 'stat:solo_deaths', refKind: 'stat' }
   ],
   cohort: 'vs Ahri mid meta (patch 14.10)',
   benchmarkBasis: 'champion_patch',
@@ -40,7 +41,7 @@ describe('parseReview', () => {
   })
 
   it('throws when the verdict lead is missing', () => {
-    expect(() => parseReview({ ...validReview, verdict: { lead: '', gild: 'x' } })).toThrow()
+    expect(() => parseReview({ ...validReview, verdictLead: '' })).toThrow()
   })
 
   it('throws when the payload is not an object', () => {
@@ -51,9 +52,9 @@ describe('parseReview', () => {
     const out = parseReview({
       ...validReview,
       claims: [
-        { text: 'ok', ref: { id: 'stat:cs', kind: 'stat' } },
+        { text: 'ok', refId: 'stat:cs', refKind: 'stat' },
         { text: 'no ref' },
-        { text: 'bad kind', ref: { id: 'x', kind: 'lol' } }
+        { text: 'bad kind', refId: 'x', refKind: 'lol' }
       ]
     })
     expect(out.claims).toHaveLength(1)
@@ -279,7 +280,7 @@ describe('parseDiscoveryPlan', () => {
       items: { properties: { kind: { enum: string[] } } }
     }
     expect(requests.maxItems).toBe(5)
-    expect(requests.items.properties.kind.enum).toEqual(['memory', 'history', 'benchmark'])
+    expect(requests.items.properties.kind.enum).toEqual(['memory', 'history', 'benchmark', 'champion_build', 'lane_matchup'])
   })
 })
 

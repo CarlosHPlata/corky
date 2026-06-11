@@ -19,7 +19,8 @@ function deps(summarize: ReturnType<typeof vi.fn>) {
     list: () => [], get: () => null, upsert: vi.fn(), delete: vi.fn(), countForMatch: () => 0
   } as never
   const model = { summarizeReflectionText: summarize } as never
-  return new SummarizeIntoReflection(matchRepo, reportRepo, goalRepo, reflectionRepo, model, 'haiku', () => NOW)
+  const itemCatalog = { getItemNames: vi.fn().mockResolvedValue(null) } as never
+  return new SummarizeIntoReflection(matchRepo, reportRepo, goalRepo, reflectionRepo, itemCatalog, model, 'haiku', () => NOW)
 }
 
 const TURNS: ChatTurn[] = [

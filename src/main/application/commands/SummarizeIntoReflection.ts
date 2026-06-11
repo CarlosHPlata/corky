@@ -3,6 +3,7 @@ import type { MatchRepository } from '../ports/MatchRepository'
 import type { ReportRepository } from '../ports/ReportRepository'
 import type { SessionGoalRepository } from '../ports/SessionGoalRepository'
 import type { ReflectionRepository } from '../ports/ReflectionRepository'
+import type { ItemCatalog } from '../ports/ItemCatalog'
 import type { MatchCoachingModel } from '../ports/MatchCoachingModel'
 import { assembleMatchReport } from '../../domain/report/assembleMatchReport'
 import { buildCoachBriefing } from '../../domain/report/coachBriefing'
@@ -24,6 +25,7 @@ export class SummarizeIntoReflection {
     private readonly reportRepo: ReportRepository,
     private readonly goalRepo: SessionGoalRepository,
     private readonly reflectionRepo: ReflectionRepository,
+    private readonly itemCatalog: ItemCatalog,
     private readonly model: MatchCoachingModel,
     private readonly chatModel: string,
     private readonly now: () => number = () => Date.now()
@@ -44,7 +46,8 @@ export class SummarizeIntoReflection {
     const analysis = this.reportRepo.getMatchAnalysis(matchId)
     const goal = this.goalRepo.get()?.goal?.trim() || undefined
     const standing = this.reportRepo.getStandingTasks(account.puuid)
-    const briefing = buildCoachBriefing(report, analysis, goal)
+    const itemNames = await this.itemCatalog.getItemNames() // null offline → id fallback
+    const briefing = buildCoachBriefing(report, analysis, goal, itemNames)
 
     const renderRefs = makeRefLineRenderer(report, standing)
     const grounded = messages.map((m) =>

@@ -48,14 +48,19 @@ function deps(
   const semanticMemory = { upsert: vi.fn(), query: () => [MEMORY_ROW], setStatus: vi.fn() } as never
   const getHistoryAggregates = { execute: () => HISTORY_AGG } as unknown as GetHistoryAggregates
   const benchmarkSource = { getChampionBenchmark: vi.fn().mockResolvedValue(BENCHMARK_REF) } as never
+  const insightsSource = {
+    getChampionBuild: vi.fn().mockResolvedValue(null),
+    getLaneMatchup: vi.fn().mockResolvedValue(null)
+  } as never
   const coachingConfigRepo = { get: () => opts.overrides ?? null, save: vi.fn(), clear: vi.fn() } as never
   const reflectionRepo = {
     list: () => [], get: () => null, upsert: vi.fn(), delete: vi.fn(), countForMatch: () => 0
   } as never
+  const itemCatalog = { getItemNames: vi.fn().mockResolvedValue(null) } as never
   return new CoachChat(
     matchRepo, reportRepo, goalRepo,
-    semanticMemory, getHistoryAggregates, benchmarkSource, coachingConfigRepo,
-    reflectionRepo, model, 'haiku'
+    semanticMemory, getHistoryAggregates, benchmarkSource, insightsSource, coachingConfigRepo,
+    reflectionRepo, itemCatalog, model, 'haiku'
   )
 }
 
@@ -111,7 +116,7 @@ describe('CoachChat', () => {
     expect(planDiscovery).toHaveBeenCalledTimes(1)
     // Question = the latest user turn; inventory = the cheap local counts.
     expect(planDiscovery.mock.calls[0][0]).toBe('was my cs fine?')
-    expect(planDiscovery.mock.calls[0][1]).toBe('INVENTORY memory=1 history=12 benchmark=available tasks=0')
+    expect(planDiscovery.mock.calls[0][1]).toMatch(/^INVENTORY memory=1 history=12 benchmark=available champion_build=available lane_matchup=\S+ tasks=0$/)
     expect(planDiscovery.mock.calls[0][2]).toBe('haiku')
     const briefing = chat.mock.calls[0][0] as string
     expect(briefing).not.toContain('DOSSIER')
@@ -174,5 +179,33 @@ describe('CoachChat', () => {
 
     expect(out).toEqual({ reply: 'still here' })
     expect(chat.mock.calls[0][0] as string).not.toContain('DOSSIER')
+  })
+
+  it('reports its discovery plan and every fetch result on the event bus', async () => {
+    const { eventBus } = await import('../../src/main/application/events/EventBus')
+    const events: { type: string; [k: string]: unknown }[] = []
+    const collect = (e: object): void => void events.push(e as { type: string })
+    eventBus.on('telemetry.discovery.plan', collect)
+    eventBus.on('telemetry.discovery.fetch', collect)
+    try {
+      const { model } = fakeModel('ok', {
+        requests: [{ kind: 'memory', query: 'river deaths' }, { kind: 'benchmark' }]
+      })
+      await deps(model).execute('WIN_001', SESSION, [{ role: 'user', text: 'do I always die in river?' }])
+    } finally {
+      eventBus.off('telemetry.discovery.plan', collect)
+      eventBus.off('telemetry.discovery.fetch', collect)
+    }
+
+    const plan = events.find((e) => e.type === 'telemetry.discovery.plan')
+    expect(plan).toMatchObject({
+      question: 'do I always die in river?',
+      requests: [{ kind: 'memory', query: 'river deaths' }, { kind: 'benchmark' }]
+    })
+    const fetches = events.filter((e) => e.type === 'telemetry.discovery.fetch')
+    expect(fetches).toHaveLength(2)
+    expect(fetches[0]).toMatchObject({ kind: 'memory', source: 'local-som', ok: true })
+    expect((fetches[0] as unknown as { lines: string[] }).lines[0]).toContain('MEM kind=pattern')
+    expect(fetches[1]).toMatchObject({ kind: 'benchmark', source: 'opgg-mcp', ok: true })
   })
 })

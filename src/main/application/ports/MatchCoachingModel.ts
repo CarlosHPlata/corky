@@ -77,10 +77,10 @@ export interface AgenticChatResult {
 }
 
 /** One data fetch the discovery planner asks for before a chat reply. `query`
- * is a free-text FTS hint, only meaningful for kind 'memory' — history and
- * benchmark requests are parameterless (the command knows the match context). */
+ * is a free-text FTS hint, only meaningful for kind 'memory' — other kinds are
+ * parameterless (the command knows the match context). */
 export interface DiscoveryRequest {
-  kind: 'memory' | 'history' | 'benchmark'
+  kind: 'memory' | 'history' | 'benchmark' | 'champion_build' | 'lane_matchup'
   query?: string
 }
 
