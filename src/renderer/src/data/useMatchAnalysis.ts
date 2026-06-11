@@ -13,13 +13,20 @@ export interface UseMatchAnalysis {
   apply: (analysis: MatchAnalysis) => void
 }
 
-function readReflection(matchId: string): string | undefined {
+// The player's stated intent fed into the analysis context as NOTE lines —
+// sourced from the reflections they wrote by hand on this game (the panel is
+// model-free, so reflections can exist before any analysis run). Only
+// player-authored ones: a coach reflection is Corky's own prior output and must
+// never be replayed back as the player's intent.
+async function readReflection(matchId: string): Promise<string | undefined> {
   try {
-    const raw = localStorage.getItem('ck-reflections-' + matchId)
-    if (!raw) return undefined
-    const v = JSON.parse(raw)
-    const text = typeof v === 'string' ? v : v?.text
-    return typeof text === 'string' && text.trim() ? text : undefined
+    const rows = await window.api.listReflections(matchId)
+    const text = rows
+      .filter((r) => r.source === 'player')
+      .map((r) => r.text.trim())
+      .filter(Boolean)
+      .join('\n\n')
+    return text || undefined
   } catch {
     return undefined
   }
@@ -63,13 +70,16 @@ export function useMatchAnalysis(matchId: string): UseMatchAnalysis {
       if (inFlight.current) return // no overlapping runs (FR-004)
       inFlight.current = true
       setState('running')
-      window.api
-        .analyzeMatch(matchId, { force, reflection: readReflection(matchId) })
-        .then((a) => settle(a))
-        .catch(() => setState('error'))
-        .finally(() => {
+      void (async () => {
+        try {
+          const reflection = await readReflection(matchId)
+          settle(await window.api.analyzeMatch(matchId, { force, reflection }))
+        } catch {
+          setState('error')
+        } finally {
           inFlight.current = false
-        })
+        }
+      })()
     },
     [matchId, settle]
   )

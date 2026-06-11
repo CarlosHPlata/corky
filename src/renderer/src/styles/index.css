@@ -399,8 +399,8 @@ code, kbd, samp, pre { font-family: var(--font-mono); }
 .ck-sb-spells, .ck-sb-keys { display: flex; flex-direction: column; gap: 3px; flex: none; }
 .ck-sb-spell { width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; overflow: hidden; background: var(--bg-input); border: 1px solid var(--border-subtle); font-family: var(--font-mono); font-size: 8px; font-weight: 700; color: var(--text-secondary); }
 .ck-rune { border-radius: 50%; display: grid; place-items: center; overflow: hidden; font-family: var(--font-mono); font-weight: 700; flex: none; }
-.ck-rune--key { width: 19px; height: 19px; font-size: 6.5px; color: var(--ink-900); }
-.ck-rune--sec { width: 17px; height: 17px; font-size: 6px; background: transparent; }
+.ck-rune--key { width: 20px; height: 20px; font-size: 6.5px; color: var(--ink-900); }
+.ck-rune--sec { width: 18px; height: 18px; font-size: 6px; background: transparent; }
 .ck-rune img { width: 84%; height: 84%; object-fit: contain; }
 
 .ck-sb-who { flex: 1 1 auto; min-width: 70px; }
@@ -434,11 +434,14 @@ code, kbd, samp, pre { font-family: var(--font-mono); }
 
 /* ---------- Coaching chat (post-game reflection) ---------- */
 .ckc-card { display: flex; flex-direction: column; overflow: hidden; }
-.ckc-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); }
+.ckc-head { display: flex; flex-direction: column; gap: 9px; padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); }
+.ckc-head__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .ckc-head__id {
   flex: none; width: 34px; height: 34px; border-radius: var(--radius-md); display: grid; place-items: center;
   background: var(--accent-soft); color: var(--gold-400);
 }
+.ckc-head__title { font-family: var(--font-display); font-weight: 600; font-size: 14.5px; color: var(--text-primary); }
+.ckc-head__sub { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); margin-top: -3px; }
 .ckc-thread { display: flex; flex-direction: column; gap: 16px; padding: 18px 16px; max-height: 420px; overflow-y: auto; }
 .ckc-row { display: flex; gap: 10px; align-items: flex-start; }
 .ckc-row--me { flex-direction: row-reverse; }
@@ -535,9 +538,9 @@ code, kbd, samp, pre { font-family: var(--font-mono); }
 .ckr-compose { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 13px 14px; }
 .ckr-compose__row { display: flex; gap: 10px; align-items: flex-end; }
 .ckr-attach { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 9px; }
-.ckr-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; margin-top: 14px; align-items: start; }
+.ckr-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin-top: 14px; align-items: start; }
 .ckr-note {
-  width: 100%; height: 200px; display: flex; flex-direction: column;
+  width: 100%; height: 25vh; display: flex; flex-direction: column;
   background: var(--bg-card-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lift), var(--shadow-md); overflow: hidden;
   transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
@@ -577,6 +580,35 @@ code, kbd, samp, pre { font-family: var(--font-mono); }
 }
 .ckr-act:hover { color: var(--text-primary); background: var(--bg-card); }
 .ckr-act--danger:hover { color: var(--loss, #e05c5c); }
+
+/* ---------- Reflections — add tile (the + card in the board) */
+.ckr-add { height: 25vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px;
+  background: transparent; border: 1.5px dashed var(--border-strong); border-radius: var(--radius-lg); cursor: pointer; text-align: center;
+  color: var(--text-faint); transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out); }
+.ckr-add:hover { border-color: var(--accent); color: var(--gold-300); background: var(--accent-soft); }
+.ckr-add:focus-visible { outline: none; box-shadow: var(--focus-ring); border-color: var(--accent); color: var(--gold-300); }
+.ckr-add__plus { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid currentColor; }
+.ckr-add__t { font-family: var(--font-display); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+.ckr-add__sub { font-family: var(--font-mono); font-size: 10.5px; color: var(--gold-300); margin-top: -4px; }
+
+/* ---------- Report layout — two-column grid with sticky aside */
+.ck-report-grid { display: grid; grid-template-columns: minmax(0, 1fr) 412px; gap: 28px; align-items: start; }
+.ck-report-main { display: flex; flex-direction: column; gap: 26px; min-width: 0; width: min(1440px, 100%); justify-self: center; }
+.ck-report-aside { position: sticky; top: 22px; align-self: start; height: calc(100vh - var(--topbar-h) - 44px); overflow: hidden; display: flex; flex-direction: column; gap: 22px; }
+.ck-report-aside > section { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.ck-report-aside > section.ck-controls-sec { flex: none; }
+.ck-ctrl-status { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: var(--radius-md); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent); }
+.ck-ctrl-status__t { font-family: var(--font-sans); font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+.ck-report-aside .ckc-card { flex: 1 1 auto; min-height: 0; }
+.ck-report-aside .ckc-card > .ck-card__body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; padding: 0; }
+.ck-report-aside .ckc-thread { flex: 1; min-height: 0; max-height: none; }
+@media (max-width: 1120px) {
+  .ck-report-grid { grid-template-columns: 1fr; }
+  .ck-report-aside { position: static; height: auto; overflow: visible; }
+  .ck-report-aside > section, .ck-report-aside > section.ck-controls-sec { flex: none; }
+  .ck-report-aside .ckc-card { flex: none; height: 70vh; max-height: 600px; }
+  .ck-report-aside .ckc-thread { max-height: none; }
+}
 
 /* ---------- Button ---------------------------------------- */
 .ck-btn {

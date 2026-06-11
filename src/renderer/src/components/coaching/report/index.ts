@@ -1,0 +1,16 @@
+// Corky post-game report — sub-components. The CoachReport screen orchestrates
+// these; each piece lives in its own file so it can be read on its own terms.
+export { SectionLabel } from './SectionLabel'
+export { GatedBlock } from './GatedBlock'
+export { UnavailableNote, CenteredNote } from './ReportNotes'
+export { ReportVerdict } from './ReportVerdict'
+export { Scoreline } from './Scoreline'
+export { Matchup } from './Scoreboard'
+export { Breakdown } from './Breakdown'
+export { DeathMap } from './DeathMap'
+export { TurningPoints } from './TurningPoints'
+export { OverallAnalysis } from './OverallAnalysis'
+export { NextGameFocus } from './NextGameFocus'
+export { SinceLastGame } from './SinceLastGame'
+export { ReportControls } from './ReportControls'
+export { loadPins, savePins, toTimelineEvents } from './format'

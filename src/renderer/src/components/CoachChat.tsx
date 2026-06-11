@@ -158,16 +158,15 @@ export function CoachChat({ matchId, core, review, standing = [], onTasksUpdated
   return (
     <Card padding={0} className="ckc-card">
       <div className="ckc-head">
-        <span className="ckc-head__id"><Icon name="sparkles" size={18} /></span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14.5, color: 'var(--text-primary)' }}>Settle next game with Corky</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)' }}>he's read your {core.champion} game · tasks change only when you accept</div>
+        <div className="ckc-head__top">
+          <span className="ckc-head__id"><Icon name="sparkles" size={18} /></span>
+          <Button variant="secondary" size="sm" onClick={summarize} disabled={finalizing || thinking || userTurns === 0}
+            iconLeft={<Icon name={finalizing ? 'refresh-cw' : 'file-text'} size={14} className={finalizing ? 'ck-spin' : ''} />}>
+            {finalizing ? 'Writing…' : 'Summarize into a reflection'}
+          </Button>
         </div>
-        <Button variant="secondary" size="sm" onClick={summarize} disabled={finalizing || thinking || userTurns === 0}
-          iconLeft={<Icon name={finalizing ? 'refresh-cw' : 'file-text'} size={14} className={finalizing ? 'ck-spin' : ''} />}
-          style={{ flex: 'none' }}>
-          {finalizing ? 'Writing…' : 'Summarize into a reflection'}
-        </Button>
+        <div className="ckc-head__title">Settle next game with Corky</div>
+        <div className="ckc-head__sub">he's read your {core.champion} game · tasks change only when you accept</div>
       </div>
 
       {/* Session switcher (spec 005 US3): stored threads newest-first plus the
@@ -244,32 +243,33 @@ export function CoachChat({ matchId, core, review, standing = [], onTasksUpdated
         </div>
       )}
 
-      {/* Pending report references — picked off the timeline / death map / stat
-          tiles / task rows, riding the next message. Click a chip to drop it. */}
-      {pendingRefs && pendingRefs.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6,
-          padding: '10px 14px 0', borderTop: '1px solid var(--border-subtle)' }}>
-          <span className="eyebrow" style={{ fontSize: 10, color: 'var(--text-faint)', marginRight: 2 }}>Asking about</span>
-          {pendingRefs.map((r) => (
-            <EvidenceChip key={r.id} kind={refChipKind(r)} refId={r.id} truncate
-              title={`${r.id} — click to remove`}
-              icon={<Icon name="message-circle" size={12} strokeWidth={2} />}
-              onClick={() => onRemoveRef?.(r.id)}>
-              {refChipLabel(r)} ×
-            </EvidenceChip>
-          ))}
-          <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)' }}>
-            {pendingRefs.length}/5
-          </span>
+      {/* Bottom dock — pending refs + input. Grouped so the thread yields space
+          upward as refs grow; neither element can push the footer off-screen. */}
+      <div style={{ flex: 'none', display: 'flex', flexDirection: 'column' }}>
+        {pendingRefs && pendingRefs.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6,
+            padding: '10px 14px 0', borderTop: '1px solid var(--border-subtle)' }}>
+            <span className="eyebrow" style={{ fontSize: 10, color: 'var(--text-faint)', marginRight: 2 }}>Asking about</span>
+            {pendingRefs.map((r) => (
+              <EvidenceChip key={r.id} kind={refChipKind(r)} refId={r.id} truncate
+                title={`${r.id} — click to remove`}
+                icon={<Icon name="message-circle" size={12} strokeWidth={2} />}
+                onClick={() => onRemoveRef?.(r.id)}>
+                {refChipLabel(r)} ×
+              </EvidenceChip>
+            ))}
+            <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)' }}>
+              {pendingRefs.length}/5
+            </span>
+          </div>
+        )}
+        <div className="ckc-foot" style={pendingRefs && pendingRefs.length > 0 ? { borderTop: 'none', paddingTop: 8 } : undefined}>
+          <textarea className="ck-field ckc-input" value={draft} onChange={autosize} onKeyDown={onKey} rows={1}
+            placeholder="Talk tasks, or talk the game…" disabled={thinking} />
+          <button type="button" className="ckc-send" onClick={() => send()} disabled={!draft.trim() || thinking} aria-label="Send">
+            <Icon name="send" size={17} />
+          </button>
         </div>
-      )}
-
-      <div className="ckc-foot" style={pendingRefs && pendingRefs.length > 0 ? { borderTop: 'none', paddingTop: 8 } : undefined}>
-        <textarea className="ck-field ckc-input" value={draft} onChange={autosize} onKeyDown={onKey} rows={1}
-          placeholder="Talk tasks, or talk the game…" disabled={thinking} />
-        <button type="button" className="ckc-send" onClick={() => send()} disabled={!draft.trim() || thinking} aria-label="Send">
-          <Icon name="send" size={17} />
-        </button>
       </div>
     </Card>
   )
