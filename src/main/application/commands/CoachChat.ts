@@ -3,7 +3,7 @@ import type { ResolvedCoachingConfig } from '@shared/config'
 import type { MatchRepository } from '../ports/MatchRepository'
 import type { ReportRepository } from '../ports/ReportRepository'
 import type { SessionGoalRepository } from '../ports/SessionGoalRepository'
-import type { MatchCoachingModel, DiscoveryRequest, AgenticChatExtras } from '../ports/MatchCoachingModel'
+import type { MatchCoachingModel, DiscoveryRequest, AgenticChatExtras, AgenticChatResult } from '../ports/MatchCoachingModel'
 import type { SemanticMemory } from '../ports/SemanticMemory'
 import type { BenchmarkDataSource } from '../ports/BenchmarkDataSource'
 import type { ChampionInsightsDataSource } from '../ports/ChampionInsightsDataSource'
@@ -25,6 +25,7 @@ import {
   sanitizeReflectionProposal,
   mintProposalId
 } from '../../domain/chat/proposal'
+import { MatchService } from '../services/Match/MatchService'
 
 /** Which config source gates each discovery kind. */
 const SOURCE_FOR_KIND: Record<DiscoveryRequest['kind'], string> = {
@@ -51,33 +52,28 @@ const SOURCE_FOR_KIND: Record<DiscoveryRequest['kind'], string> = {
  */
 export class CoachChat {
   constructor(
-    private readonly matchRepo: MatchRepository,
-    private readonly reportRepo: ReportRepository,
-    private readonly goalRepo: SessionGoalRepository,
-    private readonly semanticMemory: SemanticMemory,
-    private readonly getHistoryAggregates: GetHistoryAggregates,
-    private readonly benchmarkSource: BenchmarkDataSource,
-    private readonly insightsSource: ChampionInsightsDataSource,
-    private readonly coachingConfigRepo: CoachingConfigRepository,
-    private readonly reflectionRepo: ReflectionRepository,
-    private readonly itemCatalog: ItemCatalog,
-    private readonly model: MatchCoachingModel,
+    private readonly matchService: MatchService,
+    private readonly matchRepo: MatchRepository, //SQLREpo?
+    private readonly reportRepo: ReportRepository, //SQLREpo
+    private readonly goalRepo: SessionGoalRepository, //SQLITE
+    private readonly semanticMemory: SemanticMemory, //SO
+    private readonly getHistoryAggregates: GetHistoryAggregates, //Application FUnctionality
+    private readonly benchmarkSource: BenchmarkDataSource, //OPGG MCP
+    private readonly insightsSource: ChampionInsightsDataSource, //OPGG MCP
+    private readonly coachingConfigRepo: CoachingConfigRepository, // SQL
+    private readonly reflectionRepo: ReflectionRepository, // SQL
+    private readonly itemCatalog: ItemCatalog, // RIOT API
+    private readonly model: MatchCoachingModel, // LLM
     private readonly chatModel: string,
     private readonly now: () => number = () => Date.now()
-  ) {}
+  ) { }
 
   async execute(matchId: string, sessionId: string, messages: ChatTurn[]): Promise<CoachChatReply> {
-    const account = this.matchRepo.getCurrentAccount()
-    if (!account) throw new Error('No synced account')
-    const report = this.loadReport(matchId, account.puuid)
-    const analysis = this.reportRepo.getMatchAnalysis(matchId)
-    const goal = this.goalRepo.get()?.goal?.trim() || undefined
-    const standing = this.reportRepo.getStandingTasks(account.puuid)
-    const reflections = this.reflectionRepo.list(matchId)
+    const match = this.matchService.getMatch(matchId)
     const itemNames = await this.itemCatalog.getItemNames() // null offline → id fallback
-    let briefing = buildCoachBriefing(report, analysis, goal, itemNames)
+    let briefing = buildCoachBriefing(match.report, match.analysis, match.goal, itemNames)
 
-    const dossier = await this.runDiscovery(account.puuid, matchId, report, messages)
+    const dossier = await this.runDiscovery(match.account.puuid, matchId, match.report, messages)
     if (dossier.length) {
       briefing += `\n\nDOSSIER (fetched for this question)\n${dossier.join('\n')}`
     }
@@ -86,15 +82,16 @@ export class CoachChat {
     // is told (and tool calls refused), so this turn can only be conversational.
     const hasPendingProposal = messages.some((m) => m.proposal?.resolution === 'pending')
     const extras: AgenticChatExtras = {
-      standing,
+      standing: match.standings ?? [],
       catalogMetricKeys: [...METRIC_KEYS],
-      reflections: reflections.map((r) => ({ id: r.id, source: r.source, text: r.text })),
+      reflections: match.reflections?.map((r) => ({ id: r.id, source: r.source, text: r.text })) ?? [],
       hasPendingProposal
     }
 
+    // the main agent ask
     const result = await this.model.chatAgentic(
       briefing,
-      this.groundTurns(report, standing, messages),
+      this.groundTurns(match.report, match.standings ?? [], messages),
       extras,
       this.chatModel
     )
@@ -107,12 +104,12 @@ export class CoachChat {
     const at = this.now()
     const payload =
       result.rawProposal.kind === 'update_tasks'
-        ? sanitizeTaskProposal(result.rawProposal, standing, matchId, at)
+        ? sanitizeTaskProposal(result.rawProposal, match.standings ?? [], matchId, at)
         : sanitizeReflectionProposal(
-            result.rawProposal,
-            this.validRefIds(report, standing.map((t) => t.id)),
-            reflections
-          )
+          result.rawProposal,
+          this.validRefIds(match.report, match.standings?.map((t) => t.id) ?? []),
+          match.reflections ?? []
+        )
     if (!payload) return { reply: result.reply }
 
     const proposalTurn: ChatTurn = {
@@ -150,7 +147,8 @@ export class CoachChat {
 
     let requests: DiscoveryRequest[]
     try {
-      const plan = await this.model.planDiscovery(question, this.buildInventory(puuid, config, report), this.chatModel)
+      const inventory = this.buildInventory(puuid, config, report)
+      const plan = await this.model.planDiscovery(question, inventory, this.chatModel)
       requests = plan.requests
       eventBus.emit({ type: 'telemetry.discovery.plan', question, requests })
     } catch (e) {

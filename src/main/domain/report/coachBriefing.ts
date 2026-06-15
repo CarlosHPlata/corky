@@ -30,7 +30,7 @@ function clock(durationSec: number): string {
  */
 export function buildCoachBriefing(
   report: MatchReport,
-  analysis: MatchAnalysis | null,
+  analysis?: MatchAnalysis,
   goal?: string,
   itemNames?: ReadonlyMap<number, string> | null
 ): string {
@@ -54,7 +54,7 @@ export function buildCoachBriefing(
   if (deaths.length) {
     facts.push(
       'Deaths: ' +
-        deaths.map((d) => `${DEATH_LABEL[d.character] ?? d.character} — ${d.text}`).join('; ')
+      deaths.map((d) => `${DEATH_LABEL[d.character] ?? d.character} — ${d.text}`).join('; ')
     )
   }
 
@@ -95,7 +95,11 @@ export function buildCoachBriefing(
         const trinket = mu.you.trinketId > 0 ? itemNames.get(mu.you.trinketId) : null
         facts.push(`Your items: ${named.join(', ')}${trinket ? ` · trinket: ${trinket}` : ''}`)
       } else {
-        facts.push(`Your items (Riot item IDs): ${items.join(', ')}`)
+        // Item-name glossary unavailable (offline). Raw ids MUST NOT reach the
+        // model: it will confidently "decode" them into wrong item names.
+        facts.push(
+          'Your items: names unavailable right now — NEVER guess or name specific items from this game; if asked about the build, ask the player what they built.'
+        )
       }
     }
 

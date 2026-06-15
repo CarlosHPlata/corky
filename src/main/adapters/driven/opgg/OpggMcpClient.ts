@@ -14,6 +14,23 @@ const TOOL_LANE_META = 'lol_list_lane_meta_champions'
 const TOOL_CHAMPION_ANALYSIS = 'lol_get_champion_analysis'
 const TOOL_LANE_MATCHUP = 'lol_get_lane_matchup_guide'
 
+/** desired_output_fields for lol_get_champion_analysis. OP.GG switched this
+ *  parameter to a CLOSED SET of dotted paths (see the live tool schema) —
+ *  the old shorthand names ("average_stats", "runes", …) silently return [].
+ *  Order matters: it fixes the positional tuple order the parsers rely on. */
+const CHAMPION_ANALYSIS_FIELDS = [
+  'data.summary.average_stats.win_rate',
+  'data.summary.average_stats.pick_rate',
+  'data.runes.primary_page_name',
+  'data.runes.primary_rune_names[]',
+  'data.runes.secondary_page_name',
+  'data.core_items.ids_names[]',
+  'data.boots.ids_names[]',
+  'data.starter_items.ids_names[]',
+  'data.summoner_spells.ids_names[]',
+  'data.skill_masteries.ids[]'
+]
+
 /** OP.GG champion analysis returns compact class-notation text, NOT JSON.
  *  Lane matchup guide returns real JSON as text.
  *  RawToolCall now returns the raw text string so each caller can parse appropriately. */
@@ -87,14 +104,18 @@ function tryJson(raw: unknown): unknown | null {
 }
 
 // ---- class-notation parsers for lol_get_champion_analysis ----
-// OP.GG returns compact class-notation text, e.g.:
-// LolGetChampionAnalysis(Data(Runes("Domination",["Hail of Blades",...,"Sorcery",[...]),
-//   CoreItems(["Shadowflame","Rabadon's Deathcap"],0.16),Boots(["Sorcerer's Shoes"]),
-//   Boots(["Doran's Ring","Health Potion"]),Boots([4,14]),SkillMasteries(["Q","E","W"])))
+// OP.GG returns compact class-notation text (a "class X: fields" header section,
+// then the data), e.g.:
+// LolGetChampionAnalysis(Data(Summary(AverageStats(0.51,0.07)),
+//   Runes("Domination",["Hail of Blades",...],"Sorcery"),
+//   CoreItems(["Dusk and Dawn","Shadowflame","Rabadon's Deathcap"]),
+//   CoreItems(["Sorcerer's Shoes"]),CoreItems(["Doran's Ring","Health Potion"]),
+//   CoreItems([4,14]),SkillMasteries(["Q","E","W"])))
 //
-// With desired_output_fields=["average_stats","runes","core_items","boots",
-//   "starter_items","summoner_spells","skill_masteries"], the Data tuple order is:
-//   AverageStats, Runes, CoreItems, Boots(shoes), Boots(starter), Boots(spell IDs), SkillMasteries
+// With CHAMPION_ANALYSIS_FIELDS (dotted paths, see below) the tuple order is:
+//   AverageStats(win_rate,pick_rate), Runes, then four item blocks all rendered
+//   with the SAME class name (CoreItems): core items, boots, starter items,
+//   summoner spell IDs — and finally SkillMasteries.
 
 /** Extract all quoted strings from a comma-separated section */
 function parseStringArray(s: string): string[] {
@@ -109,18 +130,13 @@ function parseRunes(text: string): { primaryTree: string; keystone: string; seco
   return { primaryTree: m[1], keystone: primaryRunes[0] ?? '', secondaryTree: m[3] }
 }
 
-/** Parse CoreItems([...],rate) → item name array */
-function parseCoreItems(text: string): string[] | null {
-  const m = text.match(/CoreItems\(\[([^\]]+)\]/)
-  if (!m) return null
-  return parseStringArray(m[1])
-}
-
-/** Parse ALL Boots([...]) blocks in text order.
- *  In the 6-field desired_output_fields response:
- *    [0] = boots (shoe names), [1] = starter items (names), [2] = summoner spells (IDs → names) */
-function parseBootsAll(text: string): string[][] {
-  const re = /Boots\(\[([^\]]*)\]\)/g
+/** Parse ALL item-list blocks — CoreItems([...]) / Boots([...]) — in text order.
+ *  With CHAMPION_ANALYSIS_FIELDS the order is:
+ *    [0] = core items, [1] = boots, [2] = starter items, [3] = summoner spells (IDs → names)
+ *  (The header section's "class CoreItems: ids_names" lines have no brackets,
+ *  so the regex only matches data blocks.) */
+function parseItemBlocks(text: string): string[][] {
+  const re = /(?:CoreItems|Boots)\(\[([^\]]*)\]\)/g
   const results: string[][] = []
   let m
   while ((m = re.exec(text)) !== null) {
@@ -143,13 +159,16 @@ function parseSkillMasteries(text: string): string[] | null {
   return parseStringArray(m[1])
 }
 
-/** Parse win_rate from AverageStats(plays, win_rate, ...) — second positional arg */
-function parseWinRate(text: string): number | null {
-  const m = text.match(/AverageStats\([^,]+,\s*([\d.]+)/)
+/** Parse AverageStats(win_rate, pick_rate) — positional order matches
+ *  CHAMPION_ANALYSIS_FIELDS (win_rate requested first, then pick_rate). */
+function parseAverageStats(text: string): { winRate: number; pickRate: number } | null {
+  const m = text.match(/AverageStats\(([\d.]+)(?:,\s*([\d.]+))?/)
   if (!m) return null
-  const v = parseFloat(m[1])
-  if (!Number.isFinite(v)) return null
-  return v > 1 ? v / 100 : v
+  const win = parseFloat(m[1])
+  if (!Number.isFinite(win)) return null
+  const pick = m[2] !== undefined ? parseFloat(m[2]) : 0
+  const norm = (v: number): number => (v > 1 ? v / 100 : v)
+  return { winRate: norm(win), pickRate: Number.isFinite(pick) ? norm(pick) : 0 }
 }
 
 // ---- public mapper functions ----
@@ -190,10 +209,9 @@ export function mapLaneMeta(raw: unknown): LaneMetaChampion[] | null {
  */
 export function mapChampionAnalysis(raw: unknown, champion: string, position: string): ChampionAnalysis | null {
   if (typeof raw === 'string') {
-    const winRate = parseWinRate(raw)
-    if (winRate === null) return null
-    // pick rate is not in the compact desired_output_fields response
-    return { champion, position, winRate, pickRate: 0 }
+    const stats = parseAverageStats(raw)
+    if (stats === null) return null
+    return { champion, position, winRate: stats.winRate, pickRate: stats.pickRate }
   }
   // Legacy JSON object path (unit tests inject plain objects)
   if (!raw || typeof raw !== 'object') return null
@@ -231,20 +249,19 @@ function itemNames(o: Record<string, unknown>, keys: string[]): string[] {
 /**
  * Map champion-analysis response to a build insight.
  * Accepts class-notation text (live API) or a JSON object (unit tests / legacy).
- * With desired_output_fields=["average_stats","runes","core_items","boots",
- *   "starter_items","summoner_spells","skill_masteries"] the Data tuple order is fixed.
+ * With CHAMPION_ANALYSIS_FIELDS the item-block tuple order is fixed:
+ *   [core items, boots, starter items, summoner spell IDs].
  */
 export function mapChampionBuildInsight(raw: unknown, champion: string, position: string): ChampionBuildInsight | null {
   if (typeof raw === 'string') {
     const runes = parseRunes(raw)
     if (!runes) return null
 
-    const coreItems = parseCoreItems(raw) ?? []
-    const allBoots = parseBootsAll(raw)
-    // Boots tuple order matches desired_output_fields: [boots shoes, starter items, spell IDs]
-    const bootShoes = allBoots[0] ?? []
-    const startItems = allBoots[1] ?? []
-    const spellItems = allBoots[2] ?? []
+    const blocks = parseItemBlocks(raw)
+    const coreItems = blocks[0] ?? []
+    const bootShoes = blocks[1] ?? []
+    const startItems = blocks[2] ?? []
+    const spellItems = blocks[3] ?? []
     const skills = parseSkillMasteries(raw)
 
     if (runes.keystone === '' && coreItems.length === 0) return null
@@ -324,10 +341,59 @@ export function mapLaneMatchupGuide(raw: unknown, champion: string, opponent: st
   const parsed = tryJson(raw)
   if (!parsed || typeof parsed !== 'object') return null
 
-  // Unwrap common OP.GG nesting: raw.data, raw.data.matchup, etc.
+  // Current OP.GG shape (2026-06): data carries flat advice strings —
+  // opponent_champion_tip, recommended_play_style, lane_advantage_champion —
+  // plus matchup item stats (single_items), NOT a tips array.
   let o = parsed as Record<string, unknown>
-  if (o.data && typeof o.data === 'object' && !Array.isArray(o.data)) {
-    const d = o.data as Record<string, unknown>
+  const dataObj = o.data && typeof o.data === 'object' && !Array.isArray(o.data)
+    ? (o.data as Record<string, unknown>)
+    : null
+  if (dataObj && (typeof dataObj.opponent_champion_tip === 'string' || typeof dataObj.lane_advantage_champion === 'string')) {
+    const tips: string[] = []
+    const tip = str(dataObj.opponent_champion_tip)
+    if (tip) tips.push(tip)
+    const style = str(dataObj.recommended_play_style)
+    if (style) tips.push(`Recommended play style: ${style}`)
+    const solo = str(dataObj.lane_solo_kill_advantage_champion)
+    if (solo && solo.toUpperCase() !== 'EVEN') tips.push(`Solo-kill advantage: ${solo}`)
+
+    const adv = str(dataObj.lane_advantage_champion)
+    const advNorm = adv ? toOpggChampion(adv) : undefined
+    const difficulty = !advNorm ? undefined
+      : advNorm === 'EVEN' ? 'Even'
+      : advNorm === toOpggChampion(champion) ? 'Favorable'
+      : advNorm === toOpggChampion(opponent) ? 'Hard'
+      : undefined
+
+    // Most-picked depth-1 items in this specific matchup serve as counter items.
+    let counterItems: string[] | undefined
+    const single = asArray(dataObj.single_items)
+    const depth1 = (single?.[0] ?? null) as Record<string, unknown> | null
+    const depth1Items = depth1 ? asArray(depth1.items) : null
+    if (depth1Items) {
+      counterItems = depth1Items
+        .map((it) => {
+          const names = (it as Record<string, unknown>).ids_names
+          return Array.isArray(names) ? str(names[0]) : undefined
+        })
+        .filter((n): n is string => !!n)
+        .slice(0, 4)
+    }
+
+    if (tips.length === 0 && !difficulty) return null
+    return {
+      champion,
+      opponent,
+      position,
+      ...(difficulty ? { difficulty } : {}),
+      tips: tips.slice(0, 5),
+      ...(counterItems && counterItems.length > 0 ? { counterItems } : {})
+    }
+  }
+
+  // Legacy unwrap: raw.data, raw.data.matchup, etc. (unit tests / older shape)
+  if (dataObj) {
+    const d = dataObj
     if (d.matchup && typeof d.matchup === 'object' && !Array.isArray(d.matchup)) {
       o = d.matchup as Record<string, unknown>
     } else if (Array.isArray(d.counters) && d.counters.length > 0) {
@@ -422,8 +488,11 @@ function createSdkRawCall(url = OPGG_MCP_URL): RawToolCall {
   return async (name, args) => {
     const client = await getClient()
     const result = await withTimeout(client.callTool({ name, arguments: args }), TIMEOUT_MS)
-    // Return raw text — each mapper decides whether to JSON.parse or regex-parse
-    return extractText(result)
+    // Return raw text — each mapper decides whether to JSON.parse or regex-parse.
+    // OP.GG answers "[]" when it doesn't recognize the arguments (e.g. an
+    // unknown desired_output_fields entry) — that's a no-data response, not ok.
+    const text = extractText(result)
+    return text !== null && text.trim() !== '[]' ? text : null
   }
 }
 
@@ -465,7 +534,9 @@ export class OpggMcpClient {
       ...(value !== null ? { preview: preview(value) } : {}),
       ...(error !== undefined ? { error: preview(error instanceof Error ? error.message : error, 200) } : {})
     })
-    this.cache.set(key, value)
+    // Only cache successes: a transient failure or empty response must not be
+    // pinned for the process lifetime (it would poison every later question).
+    if (value !== null) this.cache.set(key, value)
     return value
   }
 
@@ -488,7 +559,7 @@ export class OpggMcpClient {
       position: opggPos,
       game_mode: gameMode,
       lang,
-      desired_output_fields: ['average_stats', 'runes', 'core_items', 'boots', 'starter_items', 'summoner_spells', 'skill_masteries']
+      desired_output_fields: CHAMPION_ANALYSIS_FIELDS
     })
   }
 

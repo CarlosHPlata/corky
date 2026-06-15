@@ -89,9 +89,13 @@ describe('buildCoachBriefing', () => {
     expect(out).toContain("Your items: Seraph's Embrace, unknown item 3135")
   })
 
-  it('degrades the items line to annotated ids without a catalog (offline)', () => {
+  it('withholds raw ids without a catalog (offline) and forbids guessing names', () => {
     const out = buildCoachBriefing(report, analysis)
-    expect(out).toContain('Your items (Riot item IDs): 3040, 3135')
+    // Raw Riot ids must NOT reach the model — it decodes them into wrong names.
+    expect(out).not.toContain('3040')
+    expect(out).not.toContain('3135')
+    expect(out).toContain('Your items: names unavailable right now')
+    expect(out).toContain('NEVER guess or name specific items')
     // Spells and runes come from the static glossary — still words offline.
     expect(out).toContain('Your summoner spells: Flash + Ignite')
     expect(out).toContain('Your runes: keystone Summon Aery, Sorcery primary, Precision secondary')

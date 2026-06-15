@@ -1,15 +1,36 @@
-import type { RankInfo } from '@shared/types'
-
 function titleCase(s: string): string {
   return s ? s[0].toUpperCase() + s.slice(1).toLowerCase() : s
 }
 
 /** "PLATINUM" + "II" -> "Platinum II". Apex tiers have no division. */
-export function rankLabel(rank: RankInfo | null): string {
+export function rankLabel(rank: { tier: string; division: string } | null): string {
   if (!rank) return 'Unranked'
   const tier = titleCase(rank.tier)
   const apex = ['Master', 'Grandmaster', 'Challenger']
   return apex.includes(tier) ? tier : `${tier} ${rank.division}`
+}
+
+const TIER_ORDER = ['IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND']
+const DIVISION_ORDER: Record<string, number> = { IV: 0, III: 1, II: 2, I: 3 }
+
+/** Tier + division + LP collapsed onto one ladder-wide scale (100 LP per
+ * division, 4 divisions per tier), so a Silver I 97 → Gold IV 13 promotion
+ * reads as +16, not −84. Apex tiers share one LP pool above Diamond. */
+export function absoluteLp(s: { tier: string; division: string; leaguePoints: number }): number {
+  const tierIdx = TIER_ORDER.indexOf(s.tier.toUpperCase())
+  if (tierIdx === -1) return TIER_ORDER.length * 400 + s.leaguePoints
+  return tierIdx * 400 + (DIVISION_ORDER[s.division.toUpperCase()] ?? 0) * 100 + s.leaguePoints
+}
+
+/** Inverse of absoluteLp's floor: the division a ladder-wide LP value sits in.
+ * Used to label division boundaries on the LP chart. */
+export function rankAtAbsoluteLp(abs: number): { tier: string; division: string } {
+  const clamped = Math.max(0, abs)
+  const tierIdx = Math.floor(clamped / 400)
+  if (tierIdx >= TIER_ORDER.length) return { tier: 'MASTER', division: '' }
+  const divIdx = Math.floor((clamped % 400) / 100)
+  const division = ['IV', 'III', 'II', 'I'][divIdx]
+  return { tier: TIER_ORDER[tierIdx], division }
 }
 
 export function formatDuration(seconds: number): string {

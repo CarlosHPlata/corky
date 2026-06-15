@@ -1,7 +1,18 @@
 import { describe, it, expect, vi } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { OpggMcpClient, mapLaneMeta, mapChampionAnalysis, type RawToolCall } from '../../src/main/adapters/driven/opgg/OpggMcpClient'
+import { OpggMcpClient, mapLaneMeta, mapChampionAnalysis, mapChampionBuildInsight, type RawToolCall } from '../../src/main/adapters/driven/opgg/OpggMcpClient'
+
+// Verbatim live response shape (2026-06 contract: dotted desired_output_fields).
+const CLASS_NOTATION_FIXTURE = `class LolGetChampionAnalysis: data
+class Data: summary,runes,core_items,boots,starter_items,summoner_spells,skill_masteries
+class Summary: average_stats
+class AverageStats: win_rate,pick_rate
+class Runes: primary_page_name,primary_rune_names,secondary_page_name
+class CoreItems: ids_names
+class SkillMasteries: ids
+
+LolGetChampionAnalysis(Data(Summary(AverageStats(0.51,0.07)),Runes("Domination",["Hail of Blades","Sudden Impact","Grisly Mementos","Relentless Hunter"],"Sorcery"),CoreItems(["Dusk and Dawn","Shadowflame","Rabadon's Deathcap"]),CoreItems(["Sorcerer's Shoes"]),CoreItems(["Doran's Ring","Health Potion","Health Potion"]),CoreItems([4,14]),SkillMasteries(["Q","E","W"])))`
 
 const laneFixture = JSON.parse(
   readFileSync(join(__dirname, '../fixtures/opgg-lane-meta.sample.json'), 'utf8')
@@ -39,6 +50,26 @@ describe('mapChampionAnalysis', () => {
   it('returns null without a win rate', () => {
     expect(mapChampionAnalysis({ foo: 1 }, 'Ahri', 'MID')).toBeNull()
   })
+
+  it('parses live class-notation text — AverageStats(win_rate, pick_rate)', () => {
+    const a = mapChampionAnalysis(CLASS_NOTATION_FIXTURE, 'Ekko', 'MID')
+    expect(a?.winRate).toBeCloseTo(0.51)
+    expect(a?.pickRate).toBeCloseTo(0.07)
+  })
+})
+
+describe('mapChampionBuildInsight (class notation)', () => {
+  it('parses runes, the four item blocks in order, spells and skill order', () => {
+    const b = mapChampionBuildInsight(CLASS_NOTATION_FIXTURE, 'Ekko', 'MID')
+    expect(b).not.toBeNull()
+    expect(b!.keystone).toBe('Hail of Blades')
+    expect(b!.primaryTree).toBe('Domination')
+    expect(b!.secondaryTree).toBe('Sorcery')
+    expect(b!.coreItems).toEqual(['Dusk and Dawn', 'Shadowflame', "Rabadon's Deathcap", "Sorcerer's Shoes"])
+    expect(b!.startItems).toEqual(["Doran's Ring", 'Health Potion', 'Health Potion'])
+    expect(b!.summonerSpells).toEqual(['Flash', 'Ignite'])
+    expect(b!.skillOrder).toBe('Q > E > W')
+  })
 })
 
 describe('OpggMcpClient', () => {
@@ -62,6 +93,14 @@ describe('OpggMcpClient', () => {
     await client.getLaneMeta()
     await client.getLaneMeta()
     expect(raw).toHaveBeenCalledTimes(1)
+  })
+
+  it('does NOT cache failures — a null raw result is retried on the next call', async () => {
+    const raw: RawToolCall = vi.fn().mockResolvedValueOnce(null).mockResolvedValue(laneFixture)
+    const client = new OpggMcpClient(raw)
+    await expect(client.getLaneMeta()).resolves.toBeNull()
+    await expect(client.getLaneMeta()).resolves.not.toBeNull()
+    expect(raw).toHaveBeenCalledTimes(2)
   })
 
   it('reports every MCP tool call on the event bus — miss then hit, with a raw preview', async () => {

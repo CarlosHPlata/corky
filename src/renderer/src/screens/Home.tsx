@@ -16,7 +16,8 @@ import type {
   MatchSummary, SummonerProfile, LpSnapshot,
   SessionInsight, InsightLeak, BenchmarkBasis, TaskEvaluationResult
 } from '@shared/types'
-import { rankLabel, relativeTime } from '../utils/format'
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, ReferenceLine } from 'recharts'
+import { absoluteLp, rankAtAbsoluteLp, rankLabel, relativeTime } from '../utils/format'
 import { profileIconUrl } from '../utils/ddragon'
 
 type Screen = 'home' | 'history' | 'report' | 'champ' | 'trends' | 'settings'
@@ -387,6 +388,38 @@ function QuickAnalysis() {
 }
 
 // ── LP trajectory, built from snapshots we record on each sync ────────────────
+interface LpPoint {
+  ts: number
+  abs: number
+  lp: number
+  rank: string
+  delta: number | null
+  promoted: boolean
+}
+
+function LpTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: LpPoint }> }) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload
+  return (
+    <div style={{
+      background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
+      padding: '9px 12px', boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
+    }}>
+      <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
+        {d.rank} · {d.lp} LP
+      </div>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', marginTop: 3 }}>
+        {relativeTime(d.ts)}
+        {d.delta != null && (
+          <span style={{ color: d.delta >= 0 ? 'var(--win)' : 'var(--loss)', marginLeft: 7, fontWeight: 700 }}>
+            {d.delta >= 0 ? '+' : '−'}{Math.abs(d.delta)} LP
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function LpRankChart({ history, rank }: { history: LpSnapshot[]; rank: SummonerProfile['soloRank'] }) {
   if (history.length < 2) {
     return (
@@ -409,59 +442,80 @@ function LpRankChart({ history, rank }: { history: LpSnapshot[]; rank: SummonerP
     )
   }
 
-  const W = 720, H = 210, padX = 10, top = 24, bot = 162
-  const lps = history.map(p => p.leaguePoints)
-  const min = Math.min(...lps), max = Math.max(...lps)
-  const span = Math.max(1, max - min)
-  const n = history.length
-  const yFor = (lp: number) => top + (1 - (lp - min) / span) * (bot - top)
-  const xFor = (i: number) => padX + (i / (n - 1)) * (W - padX * 2)
-  const node = (i: number) => ({ x: xFor(i), y: yFor(lps[i]) })
-  const lastIdx = n - 1
+  // Absolute ladder LP so promotions/demotions chart correctly (Silver I → Gold IV goes up).
+  const data: LpPoint[] = history.map((p, i) => {
+    const abs = absoluteLp(p)
+    const prev = i > 0 ? history[i - 1] : null
+    return {
+      ts: p.ts,
+      abs,
+      lp: p.leaguePoints,
+      rank: rankLabel(p),
+      delta: prev ? abs - absoluteLp(prev) : null,
+      promoted: !!prev && (p.tier !== prev.tier || p.division !== prev.division),
+    }
+  })
+  const lastIdx = data.length - 1
+  const minAbs = Math.min(...data.map(d => d.abs)), maxAbs = Math.max(...data.map(d => d.abs))
+  const domain: [number, number] = [minAbs - 18, maxAbs + 18]
+
+  // Division floors (multiples of 100) crossing the visible range, labelled "Gold IV" etc.
+  const boundaries: number[] = []
+  for (let b = Math.ceil(domain[0] / 100) * 100; b <= domain[1]; b += 100) boundaries.push(b)
+
+  const renderDot = (props: { key?: React.Key | null; cx?: number; cy?: number; index?: number; payload?: LpPoint }) => {
+    const { key, cx, cy, index, payload } = props
+    if (cx == null || cy == null || !payload) return <g key={key} />
+    const c = payload.delta == null ? 'var(--text-faint)' : payload.delta >= 0 ? 'var(--win)' : 'var(--loss)'
+    return (
+      <g key={key}>
+        {index === lastIdx && <circle cx={cx} cy={cy} r="8.5" fill="none" stroke="var(--gold-500)" strokeWidth="2" />}
+        <circle cx={cx} cy={cy} r="4.5" fill={c} stroke="var(--bg-card)" strokeWidth="2" />
+        {payload.promoted && (
+          <text x={cx} y={cy + (payload.delta != null && payload.delta < 0 ? 24 : -16)} textAnchor="middle"
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, fill: 'var(--gold-400)', letterSpacing: '0.04em' } as React.CSSProperties}>
+            {payload.delta != null && payload.delta < 0 ? '▼' : '▲'} {payload.rank}
+          </text>
+        )}
+      </g>
+    )
+  }
 
   return (
     <Card padding={16}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
         <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>LP &amp; rank</span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{rank ? rankLabel(rank) : ''} · {n} points</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+          {rank ? `${rankLabel(rank)} · ${rank.leaguePoints} LP · ` : ''}{data.length} points
+        </span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 210, display: 'block', overflow: 'visible' }} preserveAspectRatio="none">
-        {history.slice(1).map((p, k) => {
-          const a = node(k), b = node(k + 1)
-          const up = p.leaguePoints >= history[k].leaguePoints
-          return <line key={k} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={up ? 'var(--win)' : 'var(--loss)'} strokeWidth="2.5" strokeLinecap="round" />
-        })}
-        {history.map((p, i) => {
-          const { x, y } = node(i)
-          const delta = i === 0 ? 0 : p.leaguePoints - history[i - 1].leaguePoints
-          const c = i === 0 ? 'var(--text-faint)' : delta >= 0 ? 'var(--win)' : 'var(--loss)'
-          const isNow = i === lastIdx
-          const above = delta >= 0
-          return (
-            <g key={i}>
-              {isNow && <circle cx={x} cy={y} r="8.5" fill="none" stroke="var(--gold-500)" strokeWidth="2" />}
-              <circle cx={x} cy={y} r="5" fill={c} stroke="var(--bg-card)" strokeWidth="2" />
-              {i > 0 && (
-                <text x={x} y={above ? y - 12 : y + 19} textAnchor="middle"
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, fill: c } as React.CSSProperties}>
-                  {above ? '+' : '−'}{Math.abs(delta)}
-                </text>
-              )}
-            </g>
-          )
-        })}
-        <text x={xFor(lastIdx)} y={yFor(lps[lastIdx]) + 34} textAnchor="end"
-          style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, fill: 'var(--gold-400)', letterSpacing: '0.04em' } as React.CSSProperties}>
-          NOW · {lps[lastIdx]} LP
-        </text>
-      </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2, padding: `0 ${padX}px` }}>
-        {history.map((p, i) => (
-          <span key={i} style={{ flex: 1, textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)' }}>
-            {relativeTime(p.ts)}
-          </span>
-        ))}
-      </div>
+      <ResponsiveContainer width="100%" height={230}>
+        <AreaChart data={data} margin={{ top: 26, right: 14, bottom: 2, left: 14 }}>
+          <defs>
+            <linearGradient id="lpFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--gold-400)" stopOpacity={0.22} />
+              <stop offset="100%" stopColor="var(--gold-400)" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          {boundaries.map(b => {
+            const div = rankAtAbsoluteLp(b)
+            return (
+              <ReferenceLine key={b} y={b} stroke="var(--border-subtle)" strokeDasharray="4 4"
+                label={{
+                  value: rankLabel(div), position: 'insideLeft', dy: -7,
+                  style: { fontFamily: 'var(--font-mono)', fontSize: 10, fill: 'var(--text-faint)', letterSpacing: '0.04em' },
+                }} />
+            )
+          })}
+          <XAxis dataKey="ts" tickFormatter={relativeTime} axisLine={false} tickLine={false}
+            tick={{ fontFamily: 'var(--font-mono)', fontSize: 10, fill: 'var(--text-faint)' }} />
+          <YAxis dataKey="abs" domain={domain} hide />
+          <Tooltip content={<LpTooltip />} cursor={{ stroke: 'var(--border-subtle)', strokeDasharray: '4 4' }} />
+          <Area type="monotone" dataKey="abs" stroke="var(--gold-400)" strokeWidth={2.5}
+            fill="url(#lpFill)" dot={renderDot} activeDot={{ r: 6, fill: 'var(--gold-400)', stroke: 'var(--bg-card)', strokeWidth: 2 }}
+            isAnimationActive={false} />
+        </AreaChart>
+      </ResponsiveContainer>
     </Card>
   )
 }
@@ -513,13 +567,10 @@ export function Home({ data, onOpen, onNav }: {
   const { profile, matches, lpHistory, loading, syncing, error, sync } = data
   const pool = champPool(matches)
 
-  // Session LP delta: only meaningful within the same tier+division.
+  // Session LP delta on the absolute ladder scale, so it survives promotions.
   let net: number | null = null
   if (lpHistory.length >= 2) {
-    const first = lpHistory[0], last = lpHistory[lpHistory.length - 1]
-    if (first.tier === last.tier && first.division === last.division) {
-      net = last.leaguePoints - first.leaguePoints
-    }
+    net = absoluteLp(lpHistory[lpHistory.length - 1]) - absoluteLp(lpHistory[0])
   }
 
   if (loading) {
