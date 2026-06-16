@@ -82,6 +82,21 @@ describe('sanitizeTaskProposal', () => {
     expect(p.set.some((t) => t.id === 'b')).toBe(true)
   })
 
+  it('a same-lane replacement that is also explicitly retired survives (replace ≠ delete)', () => {
+    // "Replace the cs task": the new task shares task a's lane (so it inherits a's
+    // id) AND the model also lists a in retire. The retire must lose to the
+    // in-place modification — otherwise the lane is deleted and its replacement
+    // discarded, leaving the player with a task gone and nothing in its place.
+    const raw = { set: [gen({ target: 7, description: 'Hold 7 cs/min' })], retire: ['a'] }
+    const p = sanitizeTaskProposal(raw, STANDING, MATCH, NOW)!
+    expect(p.retireIds).toEqual([]) // a is modified in place, not retired
+    const cs = p.set.find((t) => t.metric === 'cs_per_min')!
+    expect(cs.id).toBe('a') // replacement inherited the existing id
+    expect(cs.target).toBe(7)
+    expect(p.set.some((t) => t.id === 'b')).toBe(true)
+    expect(p.set).toHaveLength(2)
+  })
+
   it('suppresses a proposal that would empty a non-empty set', () => {
     const raw = { set: [], retire: ['a', 'b'] }
     expect(sanitizeTaskProposal(raw, STANDING, MATCH, NOW)).toBeNull()

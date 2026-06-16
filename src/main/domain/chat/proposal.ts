@@ -60,7 +60,9 @@ function laneKey(t: Pick<StandingFocusTask, 'metric' | 'scope' | 'champion' | 'r
  * modification inherits the id — and minted (`${matchId}-chat-task-…`) where
  * genuinely new. Explicit-retire-only discipline: any current active task the
  * model omitted WITHOUT retiring is folded back in (a proposal can never drop
- * tasks by omission — FR-009), model-intended tasks first, capped at 3.
+ * tasks by omission — FR-009), model-intended tasks first, capped at 3. A
+ * retire that names a task a same-lane replacement already claims is ignored —
+ * that lane is modified in place, never emptied then left without its new task.
  *
  * Returns null (suppress) when: nothing valid survives, the set would empty a
  * non-empty standing set, or the result is a no-op against the current set.
@@ -72,9 +74,6 @@ export function sanitizeTaskProposal(
   now: number
 ): Extract<ProposalPayload, { kind: 'update_tasks' }> | null {
   const active = standing.filter((t) => t.status === 'active')
-  const activeIds = new Set(active.map((t) => t.id))
-  const retireIds = [...new Set((raw.retire ?? []).filter((id) => activeIds.has(id)))]
-  const retired = new Set(retireIds)
 
   // Distinct id seed from analysis (`matchId`) and finalize (`${matchId}-refl`)
   // mints, so a chat proposal can never collide with either.
@@ -97,10 +96,18 @@ export function sanitizeTaskProposal(
     }
   })
 
+  // A claimed id is a same-lane task being MODIFIED in place by its replacement,
+  // not retired — exclude claimed ids from the retire list so "replace the gold
+  // task" can't both delete the lane AND discard the replacement that inherited
+  // its id (which the old `proposed.filter(!retired)` below would then drop).
+  const activeIds = new Set(active.map((t) => t.id))
+  const retireIds = [...new Set((raw.retire ?? []).filter((id) => activeIds.has(id) && !claimed.has(id)))]
+  const retired = new Set(retireIds)
+
   const kept = active.filter(
     (t) => !retired.has(t.id) && !claimed.has(t.id) && !proposed.some((p) => sameShape(p, t))
   )
-  const set = enforceStandingSet([...proposed.filter((p) => !retired.has(p.id)), ...kept])
+  const set = enforceStandingSet([...proposed, ...kept])
 
   // Never empty a non-empty set; never present an empty card.
   if (set.length === 0) return null
