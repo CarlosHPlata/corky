@@ -6,11 +6,12 @@ import { Icon } from '../components/Icon'
 import {
   SectionLabel, GatedBlock, UnavailableNote, CenteredNote,
   ReportVerdict, Scoreline, Matchup, Breakdown, DeathMap,
-  TurningPoints, OverallAnalysis, NextGameFocus, SinceLastGame, ReportControls,
+  TurningPoints, OverallAnalysis, WorkingOn, NextGameFocus, SinceLastGame, ReportControls,
   loadPins, savePins, toTimelineEvents,
 } from '../components/coaching/report'
 import { useMatchReport } from '../data/useMatchReport'
 import { useMatchAnalysis } from '../data/useMatchAnalysis'
+import { useProgress } from '../data/useProgress'
 import { useReflections } from '../data/useReflections'
 import { formatDuration } from '../utils/format'
 import type { EvidenceRef } from '@shared/types'
@@ -37,6 +38,10 @@ export function CoachReport({ matchId, onAnalyzed }: {
   // call); runs the real four-pass pipeline on demand (spec 004).
   const { analysis, state, run, apply } = useMatchAnalysis(matchId)
   const analyzing = state === 'running'
+
+  // What Corky's tracking across games (player-level semantic memory). Read-only,
+  // model-free; the card hides itself when nothing is tracked yet.
+  const { progress } = useProgress()
   const runAnalyze = (): void => run()
   // Notify the host once a read is in (keeps any host-level "analyzed" flag in sync).
   useEffect(() => { if (analysis?.review) onAnalyzed?.() }, [analysis?.review, onAnalyzed])
@@ -200,6 +205,15 @@ export function CoachReport({ matchId, onAnalyzed }: {
             <SectionLabel icon="sparkles">Overall analysis</SectionLabel>
             <OverallAnalysis review={review} win={core.win} analyzing={analyzing} onAnalyze={runAnalyze} />
           </section>
+
+          {/* What Corky's working on — cross-game patterns/weaknesses (player-level
+              memory, not this game). Self-hides until something is tracked. */}
+          {progress && progress.working.length > 0 && (
+            <section>
+              <SectionLabel icon="eye">What Corky’s working on</SectionLabel>
+              <WorkingOn working={progress.working} />
+            </section>
+          )}
 
           <section>
             <SectionLabel icon="crosshair">Next-game focus</SectionLabel>

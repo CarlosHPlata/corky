@@ -68,6 +68,7 @@ export class CoachChat {
     const hasPendingProposal = messages.some((m) => m.proposal?.resolution === 'pending')
     const extras: AgenticChatExtras = {
       standing: match.standings ?? [],
+      working: this.workingMemory(match.account.puuid),
       catalogMetricKeys: [...METRIC_KEYS],
       reflections: match.reflections?.map((r) => ({ id: r.id, source: r.source, text: r.text })) ?? [],
       hasPendingProposal
@@ -103,6 +104,19 @@ export class CoachChat {
       proposal: { id: mintProposalId(sessionId, at), payload, resolution: 'pending' }
     }
     return { reply: result.reply, proposalTurn }
+  }
+
+  /** Always-on context: the patterns/weaknesses the coach is still tracking
+   * for this player (occurrences-first, like the Home progress card). Guarded —
+   * an unavailable store contributes nothing and the chat carries on. */
+  private workingMemory(puuid: string): AgenticChatExtras['working'] {
+    try {
+      return this.semanticMemory
+        .query({ puuid, kinds: ['pattern', 'weakness'], statuses: ['active', 'confirmed'], limit: 4 })
+        .map((o) => ({ statement: o.statement, kind: o.kind, occurrences: o.occurrences }))
+    } catch {
+      return []
+    }
   }
 
   private async getBriefingWithDossier(match: Match, messages: ChatTurn[]) {

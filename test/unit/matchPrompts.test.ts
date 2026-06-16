@@ -380,6 +380,7 @@ describe('parseProposalPayload', () => {
 describe('chatAgentic tool loop', () => {
   const extras: AgenticChatExtras = {
     standing: [],
+    working: [],
     catalogMetricKeys: ['cs_per_min'],
     reflections: [],
     hasPendingProposal: false
@@ -486,6 +487,7 @@ describe('buildAgenticPrompt', () => {
       id: 't1', description: 'Vision 25+', metric: 'vision_score', comparator: '>=', target: 25,
       scope: 'universal', status: 'active', sourceMatchId: 'M1'
     }],
+    working: [{ kind: 'weakness', occurrences: 3, statement: 'Dies solo in river 14-20min.' }],
     catalogMetricKeys: ['cs_per_min', 'vision_score'],
     reflections: [{ id: 'r1', source: 'player', text: 'shove only with vision' }],
     hasPendingProposal: false
@@ -496,6 +498,11 @@ describe('buildAgenticPrompt', () => {
     expect(ctx).toContain('TASK [t1]')
     expect(ctx).toContain('cs_per_min, vision_score')
     expect(ctx).toContain('REFL [r1] (player)')
+  })
+
+  it('renders the tracked patterns/weaknesses as WORKING lines, "none" when empty', () => {
+    expect(renderAgenticContext(agentic)).toContain('WORKING (weakness x3) "Dies solo in river 14-20min."')
+    expect(renderAgenticContext({ ...agentic, working: [] })).toContain('WORKING none')
   })
 
   it('flags a pending proposal so the model will not stack another', () => {

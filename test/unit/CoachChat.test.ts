@@ -111,6 +111,15 @@ describe('CoachChat', () => {
     expect(out).toEqual({ reply: 'Look at the map before you push.' })
   })
 
+  it('passes the cross-game working memory through as always-on extras', async () => {
+    const { model, chat } = fakeModel('Same river deaths again.')
+    await deps(model).execute('WIN_001', SESSION, [{ role: 'user', text: 'hi' }])
+    const extras = chat.mock.calls[0][2] as { working: { statement: string; kind: string; occurrences: number }[] }
+    expect(extras.working).toEqual([
+      { kind: 'pattern', occurrences: 3, statement: 'Dies solo in river 14-20min.' }
+    ])
+  })
+
   it('appends no dossier when the planner requests nothing', async () => {
     const { model, chat, planDiscovery } = fakeModel('ok', { requests: [] })
     await deps(model).execute('WIN_001', SESSION, [{ role: 'user', text: 'was my cs fine?' }])

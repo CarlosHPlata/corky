@@ -622,7 +622,7 @@ export const PROPOSE_TOOLS = [
   PROPOSE_DELETE_REFLECTION
 ]
 
-const AGENTIC_SCAFFOLD = `You are coaching the player 1:1 over chat about ONE of their ranked League of Legends games. The first message gives you the facts of THIS game, their standing focus tasks, and their saved reflections — coach off those facts. Your PRIMARY job across the session: leave the player with a settled next-game task set.
+const AGENTIC_SCAFFOLD = `You are coaching the player 1:1 over chat about ONE of their ranked League of Legends games. The first message gives you the facts of THIS game, their standing focus tasks, their saved reflections, and WORKING lines — the recurring patterns/weaknesses you've been tracking across their recent games — coach off those facts. Your PRIMARY job across the session: leave the player with a settled next-game task set.
 
 You can PROPOSE actions with the tools — change the focus tasks, save/edit/delete a reflection. A proposal is shown to the player as a card they accept or reject; NOTHING changes until they accept. Lines like [player accepted ...] / [player rejected ...] in the conversation tell you how earlier proposals went.
 
@@ -646,10 +646,13 @@ export function renderAgenticContext(extras: AgenticChatExtras): string {
   const reflections = extras.reflections.length
     ? extras.reflections.map((r) => `REFL [${r.id}] (${r.source}) "${r.text}"`).join('\n')
     : 'REFL none'
+  const working = extras.working.length
+    ? extras.working.map((w) => `WORKING (${w.kind} x${w.occurrences}) "${w.statement}"`).join('\n')
+    : 'WORKING none'
   const pending = extras.hasPendingProposal
     ? '\nA proposal is already awaiting the player\'s decision — do not propose another until they resolve it.'
     : ''
-  return `Computable metric keys: ${extras.catalogMetricKeys.join(', ')}\n${tasks}\n${reflections}${pending}`
+  return `Computable metric keys: ${extras.catalogMetricKeys.join(', ')}\n${tasks}\n${reflections}\n${working}${pending}`
 }
 
 export function buildAgenticPrompt(

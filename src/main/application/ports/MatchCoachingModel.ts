@@ -61,6 +61,10 @@ export interface ExistingMemoryEntry {
  * propose against. Compact projections only — never full rows. */
 export interface AgenticChatExtras {
   standing: StandingFocusTask[]
+  /** What the coach has been tracking across games (active patterns/weaknesses),
+   * occurrences-descending. Always-on context — distinct from the on-demand
+   * DOSSIER memory the discovery flow may fetch for a specific question. */
+  working: { statement: string; kind: string; occurrences: number }[]
   /** The metric keys the extraction engine can compute (proposed tasks must use one). */
   catalogMetricKeys: MetricKey[]
   /** This match's reflections, projected for reference by id in proposals. */
