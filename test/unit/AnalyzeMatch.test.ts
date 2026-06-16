@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { AnalyzeMatch } from '../../src/main/application/commands/AnalyzeMatch'
+import { MatchService } from '../../src/main/application/services/Match/MatchService'
 import type { MatchCoachingModel, ReviewExtras } from '../../src/main/application/ports/MatchCoachingModel'
 import type { MatchAnalysis, ReviewOutput } from '../../src/shared/types'
 import type { CoachingConfigOverrides } from '../../src/shared/config'
@@ -57,8 +58,11 @@ function deps(
   const goalRepo = { get: () => (opts.goal ? { goal: opts.goal } : null) } as never
   // Default: no stored overrides ⇒ pure hardcoded defaults (all blocks/sources on).
   const coachingConfigRepo = { get: () => opts.overrides ?? null, save: () => {}, clear: () => {} } as never
+  const reflectionRepo = { list: () => [] } as never
+  const itemCatalog = { getItemNames: vi.fn().mockResolvedValue(new Map()) } as never
+  const matchService = new MatchService(matchRepo, reportRepo, goalRepo, reflectionRepo, itemCatalog)
   const cmd = new AnalyzeMatch(
-    matchRepo, summonerRepo, reportRepo, model, benchmarkSource, goalRepo, coachingConfigRepo,
+    matchRepo, summonerRepo, reportRepo, matchService, model, benchmarkSource, goalRepo, coachingConfigRepo,
     'haiku', 'opus', () => 123
   )
   return { cmd, upserts, getChampionBenchmark }
@@ -113,13 +117,19 @@ describe('AnalyzeMatch', () => {
       getMatchDetail: () => null,
       getTimeline: () => null
     } as never
+    const reportRepo = { getMatchAnalysis: () => null, upsertMatchAnalysis: () => {} } as never
+    const goalRepo = { get: () => null } as never
+    const reflectionRepo = { list: () => [] } as never
+    const itemCatalog = { getItemNames: vi.fn().mockResolvedValue(new Map()) } as never
+    const matchService = new MatchService(matchRepo, reportRepo, goalRepo, reflectionRepo, itemCatalog)
     const cmd = new AnalyzeMatch(
       matchRepo,
       { getProfile: () => null } as never,
-      { getMatchAnalysis: () => null, upsertMatchAnalysis: () => {} } as never,
+      reportRepo,
+      matchService,
       model,
       { getChampionBenchmark: vi.fn().mockResolvedValue(null) } as never,
-      { get: () => null } as never,
+      goalRepo,
       { get: () => null, save: () => {}, clear: () => {} } as never,
       'haiku', 'opus'
     )

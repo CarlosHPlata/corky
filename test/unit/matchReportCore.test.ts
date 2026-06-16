@@ -27,7 +27,7 @@ describe('extractCore', () => {
 
 describe('extractMatchup', () => {
   it('resolves the lane opponent for a mid game and orders both teams', () => {
-    const mu = extractMatchup(loadMatch('WIN_001'), PLAYER_PUUID)
+    const mu = extractMatchup(loadMatch('WIN_001'), PLAYER_PUUID, new Map())
     expect(mu.you.isYou).toBe(true)
     expect(mu.you.role).toBe('Mid')
     expect(mu.allies).toHaveLength(5)
@@ -40,7 +40,7 @@ describe('extractMatchup', () => {
   })
 
   it('carries per-player KDA, CS and gold for every roster entry', () => {
-    const mu = extractMatchup(loadMatch('WIN_001'), PLAYER_PUUID)
+    const mu = extractMatchup(loadMatch('WIN_001'), PLAYER_PUUID, new Map())
     const you = mu.allies.find((a) => a.isYou)!
     expect(you.kills).toBe(9)
     expect(you.deaths).toBe(2)
@@ -55,14 +55,14 @@ describe('extractMatchup', () => {
   })
 
   it('returns no fixed lane opponent for a jungle player', () => {
-    const mu = extractMatchup(loadMatch('JUNGLE_004'), PLAYER_PUUID)
+    const mu = extractMatchup(loadMatch('JUNGLE_004'), PLAYER_PUUID, new Map())
     expect(mu.you.role).toBe('Jungle')
     expect(mu.laneOpponent).toBeNull()
     expect(mu.enemies.every((e) => !e.isLaneOpponent)).toBe(true)
   })
 
   it('carries each player\'s loadout: spells, runes, 6 item slots and trinket', () => {
-    const mu = extractMatchup(loadMatch('WIN_001'), PLAYER_PUUID)
+    const mu = extractMatchup(loadMatch('WIN_001'), PLAYER_PUUID, new Map())
     const you = mu.you
     expect(you.summonerSpellIds).toEqual([4, 12]) // Flash + Teleport
     expect(you.keystoneId).toBe(8112) // Electrocute
@@ -82,15 +82,29 @@ describe('extractMatchup', () => {
     }
   })
 
+  it('resolves item ids to named Item objects via the catalog (Unknown when absent)', () => {
+    const bare = extractMatchup(loadMatch('WIN_001'), PLAYER_PUUID, new Map())
+    // every slot becomes an {id,name} Item, aligned 1:1 with the raw ids
+    expect(bare.you.items.map((i) => i.id)).toEqual(bare.you.itemIds)
+    expect(bare.you.trinket.id).toBe(bare.you.trinketId)
+    // an empty catalog never drops a slot — it labels it Unknown
+    expect(bare.you.items.every((i) => i.name === 'Unknown')).toBe(true)
+
+    // a populated catalog resolves the names it knows
+    const names = new Map<number, string>(bare.you.itemIds.map((id) => [id, `Item ${id}`]))
+    const named = extractMatchup(loadMatch('WIN_001'), PLAYER_PUUID, names)
+    expect(named.you.items.map((i) => i.name)).toEqual(bare.you.itemIds.map((id) => `Item ${id}`))
+  })
+
   it('keeps unfilled item slots as 0 rather than dropping them', () => {
-    const mu = extractMatchup(loadMatch('SHORT_003'), PLAYER_PUUID)
+    const mu = extractMatchup(loadMatch('SHORT_003'), PLAYER_PUUID, new Map())
     // a short game ends on a partial build — trailing slots stay empty
     expect(mu.you.itemIds.filter((id) => id > 0).length).toBeLessThan(6)
     expect(mu.you.itemIds).toHaveLength(6)
   })
 
   it('extracts per-team objective tallies for the scoreboard header', () => {
-    const mu = extractMatchup(loadMatch('WIN_001'), PLAYER_PUUID)
+    const mu = extractMatchup(loadMatch('WIN_001'), PLAYER_PUUID, new Map())
     expect(mu.allyObjectives).toEqual({ towers: 9, dragons: 3, barons: 1 })
     expect(mu.enemyObjectives).toEqual({ towers: 2, dragons: 1, barons: 0 })
   })
@@ -104,7 +118,7 @@ describe('extractMatchup', () => {
         ]
       }
     }
-    const mu = extractMatchup(stripped, PLAYER_PUUID)
+    const mu = extractMatchup(stripped, PLAYER_PUUID, new Map())
     expect(mu.you.itemIds).toEqual([0, 0, 0, 0, 0, 0])
     expect(mu.you.trinketId).toBe(0)
     expect(mu.you.summonerSpellIds).toEqual([0, 0])

@@ -22,7 +22,7 @@ describe('review repro', () => {
     const rawTimeline = dump.timeline ? JSON.parse(dump.timeline.raw_json) : null
     const puuid = dump.account.puuid
 
-    const report = assembleMatchReport(rawMatch, rawTimeline, puuid)
+    const report = assembleMatchReport(rawMatch, rawTimeline, puuid, new Map())
     const catalog = buildAnchorCatalog(report)
 
     const config = resolveConfig(dump.config ? JSON.parse(dump.config.json) : undefined)

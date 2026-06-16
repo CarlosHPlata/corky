@@ -3,7 +3,7 @@ import type { SyncRecentMatches } from '../../application/commands/SyncRecentMat
 import type { SyncSummonerProfile } from '../../application/commands/SyncSummonerProfile'
 import type { GetMatchList } from '../../application/queries/GetMatchList'
 import type { GetMatchPage } from '../../application/queries/GetMatchPage'
-import type { GetMatchReport } from '../../application/queries/GetMatchReport'
+import type { MatchService } from '../../application/services/Match/MatchService'
 import type { MatchPageRequest } from '@shared/types'
 import type { GetSummonerProfile } from '../../application/queries/GetSummonerProfile'
 import type { GetLpHistory } from '../../application/queries/GetLpHistory'
@@ -37,7 +37,7 @@ export function registerIpcHandlers(deps: {
   syncSummonerProfile: SyncSummonerProfile
   getMatchList: GetMatchList
   getMatchPage: GetMatchPage
-  getMatchReport: GetMatchReport
+  matchService: MatchService
   getSummonerProfile: GetSummonerProfile
   getLpHistory: GetLpHistory
   getCoachReport: GetCoachReport
@@ -74,7 +74,7 @@ export function registerIpcHandlers(deps: {
   })
 
   ipcMain.handle('report:match', (_event, matchId: string) => {
-    return deps.getMatchReport.execute(matchId)
+    return deps.matchService.getReport(matchId)
   })
 
   ipcMain.handle('summoner:sync', async () => {

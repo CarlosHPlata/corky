@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildCoachBriefing } from '../../src/main/domain/report/coachBriefing'
-import type { MatchReport, MatchAnalysis, MatchCore, Matchup } from '../../src/shared/types'
+import type { MatchReport, MatchAnalysis, MatchCore, Matchup, Item } from '../../src/shared/types'
 
 const core: MatchCore = {
   champion: 'Ahri', role: 'Mid', win: false,
@@ -9,15 +9,30 @@ const core: MatchCore = {
   durationSec: 1884, queue: 420
 }
 
+// Item names are resolved upstream (assembleMatchReport → extractMatchup) into
+// RosterEntry.items/trinket; the briefing just reads those names. Entries we
+// don't assert item lines for carry empty slots.
+const NO_ITEMS: Item[] = []
+const NO_TRINKET: Item = { id: 0, name: '' }
+const YOUR_ITEMS: Item[] = [
+  { id: 3040, name: "Seraph's Embrace" },
+  { id: 3135, name: 'Void Staff' },
+  { id: 3020, name: "Sorcerer's Shoes" },
+  { id: 3116, name: "Rylai's Crystal Scepter" },
+  { id: 3157, name: "Zhonya's Hourglass" },
+  { id: 3030, name: 'Hextech Rocketbelt' }
+]
+const YOUR_TRINKET: Item = { id: 3340, name: 'Stealth Ward' }
+
 const matchup: Matchup = {
-  you: { champion: 'Ahri', role: 'Mid', teamId: 100, isYou: true, isLaneOpponent: false, kills: 4, deaths: 6, assists: 7, cs: 201, gold: 11200, champLevel: 16, damageToChampions: 22000, riotId: 'player', summonerSpellIds: [4, 14], keystoneId: 8214, primaryStyleId: 8200, subStyleId: 8000, itemIds: [3040, 3135, 3020, 3116, 3157, 3030], trinketId: 3340 },
-  laneOpponent: { champion: 'Zed', role: 'Mid', teamId: 200, isYou: false, isLaneOpponent: true, kills: 8, deaths: 3, assists: 5, cs: 220, gold: 13100, champLevel: 17, damageToChampions: 28000, riotId: 'opp', summonerSpellIds: [4, 12], keystoneId: 8128, primaryStyleId: 8100, subStyleId: 8300, itemIds: [3142, 3147, 3071, 3814, 3158, 0], trinketId: 3340 },
+  you: { champion: 'Ahri', role: 'Mid', teamId: 100, isYou: true, isLaneOpponent: false, kills: 4, deaths: 6, assists: 7, cs: 201, gold: 11200, champLevel: 16, damageToChampions: 22000, riotId: 'player', summonerSpellIds: [4, 14], keystoneId: 8214, primaryStyleId: 8200, subStyleId: 8000, itemIds: [3040, 3135, 3020, 3116, 3157, 3030], trinketId: 3340, items: YOUR_ITEMS, trinket: YOUR_TRINKET },
+  laneOpponent: { champion: 'Zed', role: 'Mid', teamId: 200, isYou: false, isLaneOpponent: true, kills: 8, deaths: 3, assists: 5, cs: 220, gold: 13100, champLevel: 17, damageToChampions: 28000, riotId: 'opp', summonerSpellIds: [4, 12], keystoneId: 8128, primaryStyleId: 8100, subStyleId: 8300, itemIds: [3142, 3147, 3071, 3814, 3158, 0], trinketId: 3340, items: NO_ITEMS, trinket: NO_TRINKET },
   allies: [
-    { champion: 'Garen', role: 'Top', teamId: 100, isYou: false, isLaneOpponent: false, kills: 2, deaths: 4, assists: 5, cs: 180, gold: 9000, champLevel: 14, damageToChampions: 15000, riotId: 'a', summonerSpellIds: [4, 14], keystoneId: null, primaryStyleId: null, subStyleId: null, itemIds: [3026, 3742, 0, 0, 0, 0], trinketId: 0 },
-    { champion: 'Ahri', role: 'Mid', teamId: 100, isYou: true, isLaneOpponent: false, kills: 4, deaths: 6, assists: 7, cs: 201, gold: 11200, champLevel: 16, damageToChampions: 22000, riotId: 'player', summonerSpellIds: [4, 14], keystoneId: 8214, primaryStyleId: 8200, subStyleId: 8000, itemIds: [3040, 3135, 3020, 3116, 3157, 3030], trinketId: 3340 }
+    { champion: 'Garen', role: 'Top', teamId: 100, isYou: false, isLaneOpponent: false, kills: 2, deaths: 4, assists: 5, cs: 180, gold: 9000, champLevel: 14, damageToChampions: 15000, riotId: 'a', summonerSpellIds: [4, 14], keystoneId: null, primaryStyleId: null, subStyleId: null, itemIds: [3026, 3742, 0, 0, 0, 0], trinketId: 0, items: NO_ITEMS, trinket: NO_TRINKET },
+    { champion: 'Ahri', role: 'Mid', teamId: 100, isYou: true, isLaneOpponent: false, kills: 4, deaths: 6, assists: 7, cs: 201, gold: 11200, champLevel: 16, damageToChampions: 22000, riotId: 'player', summonerSpellIds: [4, 14], keystoneId: 8214, primaryStyleId: 8200, subStyleId: 8000, itemIds: [3040, 3135, 3020, 3116, 3157, 3030], trinketId: 3340, items: YOUR_ITEMS, trinket: YOUR_TRINKET }
   ],
   enemies: [
-    { champion: 'Zed', role: 'Mid', teamId: 200, isYou: false, isLaneOpponent: true, kills: 8, deaths: 3, assists: 5, cs: 220, gold: 13100, champLevel: 17, damageToChampions: 28000, riotId: 'opp', summonerSpellIds: [4, 12], keystoneId: 8128, primaryStyleId: 8100, subStyleId: 8300, itemIds: [3142, 3147, 3071, 3814, 3158, 0], trinketId: 3340 }
+    { champion: 'Zed', role: 'Mid', teamId: 200, isYou: false, isLaneOpponent: true, kills: 8, deaths: 3, assists: 5, cs: 220, gold: 13100, champLevel: 17, damageToChampions: 28000, riotId: 'opp', summonerSpellIds: [4, 12], keystoneId: 8128, primaryStyleId: 8100, subStyleId: 8300, itemIds: [3142, 3147, 3071, 3814, 3158, 0], trinketId: 3340, items: NO_ITEMS, trinket: NO_TRINKET }
   ],
   allyObjectives: { towers: 3, dragons: 1, barons: 0 },
   enemyObjectives: { towers: 7, dragons: 3, barons: 1 }
@@ -63,12 +78,7 @@ describe('buildCoachBriefing', () => {
   })
 
   it('includes team matchup, build and runes in the brief — loadout as words', () => {
-    const itemNames = new Map([
-      [3040, "Seraph's Embrace"], [3135, 'Void Staff'], [3020, "Sorcerer's Shoes"],
-      [3116, "Rylai's Crystal Scepter"], [3157, "Zhonya's Hourglass"], [3030, 'Hextech Rocketbelt'],
-      [3340, 'Stealth Ward']
-    ])
-    const out = buildCoachBriefing(report, analysis, undefined, itemNames)
+    const out = buildCoachBriefing(report, analysis, undefined)
     // Lane opponent
     expect(out).toContain('Lane opponent: Zed')
     expect(out).toContain('8/3/5')
@@ -76,7 +86,7 @@ describe('buildCoachBriefing', () => {
     expect(out).toContain('Ahri/Mid[YOU]')
     expect(out).toContain('Zed/Mid[OPP]')
     expect(out).toContain('Garen/Top')
-    // Loadout, all in words — never raw Riot ids
+    // Loadout, all in words — the names resolved into the report, never raw ids
     expect(out).toContain('Your summoner spells: Flash + Ignite')
     expect(out).toContain("Your items: Seraph's Embrace, Void Staff, Sorcerer's Shoes, Rylai's Crystal Scepter, Zhonya's Hourglass, Hextech Rocketbelt · trinket: Stealth Ward")
     expect(out).toContain('Your runes: keystone Summon Aery, Sorcery primary, Precision secondary')
@@ -84,25 +94,8 @@ describe('buildCoachBriefing', () => {
     expect(out).not.toContain('3040')
   })
 
-  it('marks items missing from the catalog instead of dropping them', () => {
-    const out = buildCoachBriefing(report, analysis, undefined, new Map([[3040, "Seraph's Embrace"]]))
-    expect(out).toContain("Your items: Seraph's Embrace, unknown item 3135")
-  })
-
-  it('withholds raw ids without a catalog (offline) and forbids guessing names', () => {
-    const out = buildCoachBriefing(report, analysis)
-    // Raw Riot ids must NOT reach the model — it decodes them into wrong names.
-    expect(out).not.toContain('3040')
-    expect(out).not.toContain('3135')
-    expect(out).toContain('Your items: names unavailable right now')
-    expect(out).toContain('NEVER guess or name specific items')
-    // Spells and runes come from the static glossary — still words offline.
-    expect(out).toContain('Your summoner spells: Flash + Ignite')
-    expect(out).toContain('Your runes: keystone Summon Aery, Sorcery primary, Precision secondary')
-  })
-
   it('degrades to hard facts when there is no analysis yet', () => {
-    const out = buildCoachBriefing(report, null)
+    const out = buildCoachBriefing(report, undefined, undefined)
     expect(out).toContain('Ahri (Mid)')
     expect(out).not.toContain("Corky's verdict")
     expect(out).not.toContain('Standing focus tasks')

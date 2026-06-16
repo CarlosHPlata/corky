@@ -258,10 +258,10 @@ export function parseFraming(input: unknown): FramingOutput {
 
   const captions = o.captions && typeof o.captions === 'object'
     ? Object.fromEntries(
-        Object.entries(o.captions as Record<string, unknown>)
-          .filter(([, v]) => typeof v === 'string' && v.trim())
-          .map(([k, v]) => [k, (v as string).trim()])
-      )
+      Object.entries(o.captions as Record<string, unknown>)
+        .filter(([, v]) => typeof v === 'string' && v.trim())
+        .map(([k, v]) => [k, (v as string).trim()])
+    )
     : undefined
 
   return { headlineTag, headlineTagIntent: intent, quickRead, mvp, matchupTips, ...(captions && Object.keys(captions).length ? { captions } : {}) }
@@ -747,7 +747,10 @@ You get the question and an INVENTORY line. Available fetch kinds:
 - "history": the player's past game stats for this champion/role
 - "benchmark": OP.GG meta CS/win-rate reference for this champion/role
 - "champion_build": OP.GG current optimal build, runes and skill order — use when the question is about items, runes or build choices
-- "lane_matchup": OP.GG matchup guide vs the lane opponent — use when the question is about the specific matchup, counter-play or how to beat the enemy champ (inventory shows the opponent name)
+- "lane_matchup": OP.GG matchup guide vs the lane opponent — use when the question is about the specific matchup, and if the build is correct for counter-play or how to beat the enemy champ (inventory shows the opponent name)
+
+You can combine different kinds, for example if user ask "was my build ok for this matchup" you can combine "campioun_build" for query about build and "lane_matchup" for query about matchup success, and "history" for query about previous games vs this opponent. 
+another example: If user asks, did I accomplish against this matchup as the past you can use "memory", "history", "lane_matchup", "benchmark".
 
 Output contract (locked):
 - Request only kinds the inventory lists. Never request a source the inventory shows as "off".

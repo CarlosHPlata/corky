@@ -7,6 +7,7 @@
     "lib": ["ESNext"],
     "strict": true,
     "skipLibCheck": true,
+    "resolveJsonModule": true,
     "noEmit": false,
     "declaration": true,
     "declarationMap": true,
@@ -20,6 +21,7 @@
   "include": [
     "electron.vite.config.*",
     "src/main/**/*",
+    "src/main/**/*.json",
     "src/preload/**/*",
     "src/shared/**/*",
     "test/**/*"

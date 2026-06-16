@@ -15,7 +15,8 @@ import { extractDeathMap } from './deathMap'
 export function assembleMatchReport(
   rawMatch: unknown,
   rawTimeline: unknown | null,
-  puuid: string
+  puuid: string,
+  itemNames: ReadonlyMap<number, string>
 ): MatchReport {
   const matchId = (rawMatch as { metadata?: { matchId?: string } })?.metadata?.matchId ?? ''
   const me = participants(rawMatch).find((p) => p.puuid === puuid)
@@ -26,7 +27,7 @@ export function assembleMatchReport(
   const hasTimeline = rawTimeline != null && frames(rawTimeline).length > 0
 
   const core = extractCore(rawMatch, puuid)
-  const matchup = extractMatchup(rawMatch, puuid)
+  const matchup = extractMatchup(rawMatch, puuid, itemNames)
   const breakdown = extractBreakdown(rawMatch, rawTimeline ?? null, puuid, laneOpponentId)
 
   if (!hasTimeline) {

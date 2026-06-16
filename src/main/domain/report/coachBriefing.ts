@@ -30,9 +30,8 @@ function clock(durationSec: number): string {
  */
 export function buildCoachBriefing(
   report: MatchReport,
-  analysis?: MatchAnalysis,
-  goal?: string,
-  itemNames?: ReadonlyMap<number, string> | null
+  analysis: MatchAnalysis | undefined,
+  goal: string | undefined,
 ): string {
   const c = report.core
   const facts: string[] = []
@@ -71,7 +70,7 @@ export function buildCoachBriefing(
   // Team matchup. Loadout facts are rendered as WORDS — the model coaches off
   // names, not Riot's numeric ids. Spells/keystone/trees resolve from the
   // static glossary; item names from the caller-supplied Data Dragon catalog
-  // (absent offline, in which case the items line degrades to annotated ids).
+  // (always populated — bundled snapshot + disk cache + background refresh).
   const mu = report.matchup
   if (mu) {
     if (mu.laneOpponent) {
@@ -88,19 +87,10 @@ export function buildCoachBriefing(
       .map((id) => summonerSpellName(id) ?? `spell ${id}`)
     if (spells.length) facts.push(`Your summoner spells: ${spells.join(' + ')}`)
 
-    const items = mu.you.itemIds.filter((id) => id > 0)
-    if (items.length) {
-      if (itemNames) {
-        const named = items.map((id) => itemNames.get(id) ?? `unknown item ${id}`)
-        const trinket = mu.you.trinketId > 0 ? itemNames.get(mu.you.trinketId) : null
-        facts.push(`Your items: ${named.join(', ')}${trinket ? ` · trinket: ${trinket}` : ''}`)
-      } else {
-        // Item-name glossary unavailable (offline). Raw ids MUST NOT reach the
-        // model: it will confidently "decode" them into wrong item names.
-        facts.push(
-          'Your items: names unavailable right now — NEVER guess or name specific items from this game; if asked about the build, ask the player what they built.'
-        )
-      }
+    if (mu.you.items.length) {
+      const named = mu.you.items.map((item) => item.name)
+      const trinket = mu.you.trinket.name
+      facts.push(`Your items: ${named.join(', ')}${trinket ? ` · trinket: ${trinket}` : ''}`)
     }
 
     const runeParts: string[] = []

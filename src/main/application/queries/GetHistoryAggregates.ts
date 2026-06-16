@@ -1,10 +1,10 @@
 import type { MatchRepository } from '../ports/MatchRepository'
+import type { MatchService } from '../services/Match/MatchService'
 import {
   computeCohortAggregates,
   type CohortAggregates,
   type MatchMetricRow
 } from '../../domain/history/cohortAggregates'
-import { assembleMatchReport } from '../../domain/report/assembleMatchReport'
 import { METRIC_KEYS, computeMetric } from '../../domain/report/metricRegistry'
 import { matchInfo } from '../../domain/report/raw'
 
@@ -26,9 +26,12 @@ export interface HistoryAggregatesInput {
  * start — callers fall back to the general benchmark and say so).
  */
 export class GetHistoryAggregates {
-  constructor(private readonly matchRepo: MatchRepository) {}
+  constructor(
+    private readonly matchRepo: MatchRepository,
+    private readonly matchService: MatchService
+  ) { }
 
-  execute(input: HistoryAggregatesInput): CohortAggregates | null {
+  async execute(input: HistoryAggregatesInput): Promise<CohortAggregates | null> {
     const account = this.matchRepo.getCurrentAccount()
     if (!account) return null
 
@@ -37,24 +40,18 @@ export class GetHistoryAggregates {
     for (const detail of details) {
       if (detail.matchId === input.excludeMatchId) continue
 
+      const report = await this.matchService.getReport(detail.matchId)
+      if (!report) continue // unparseable/missing stored match ⇒ skip, don't fail the history
+
+      // gameCreation isn't on the report; pull it from the raw JSON we already
+      // have in hand from listMatchDetails (cheaper than another repo round-trip).
       let rawMatch: unknown
       try {
         rawMatch = JSON.parse(detail.rawJson)
       } catch {
-        continue // unparseable stored match ⇒ skip, don't fail the history
+        continue
       }
 
-      const timelineRow = this.matchRepo.getTimeline(detail.matchId)
-      let rawTimeline: unknown | null = null
-      if (timelineRow) {
-        try {
-          rawTimeline = JSON.parse(timelineRow.rawJson)
-        } catch {
-          rawTimeline = null // unparseable timeline ⇒ degrade, don't fail
-        }
-      }
-
-      const report = assembleMatchReport(rawMatch, rawTimeline, account.puuid)
       const metrics: Record<string, number | null> = {}
       for (const key of METRIC_KEYS) metrics[key] = computeMetric(key, report)
 

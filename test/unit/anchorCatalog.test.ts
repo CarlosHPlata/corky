@@ -3,7 +3,7 @@ import { buildAnchorCatalog, isValidStructuredRef } from '../../src/main/domain/
 import { assembleMatchReport } from '../../src/main/domain/report/assembleMatchReport'
 import { loadMatch, loadTimeline, PLAYER_PUUID } from '../fixtures/load'
 
-const win = assembleMatchReport(loadMatch('WIN_001'), loadTimeline('WIN_001'), PLAYER_PUUID)
+const win = assembleMatchReport(loadMatch('WIN_001'), loadTimeline('WIN_001'), PLAYER_PUUID, new Map())
 
 describe('buildAnchorCatalog', () => {
   it('emits a stat anchor for every headline + breakdown figure', () => {
@@ -37,7 +37,7 @@ describe('buildAnchorCatalog', () => {
   })
 
   it('has no markers when the timeline is unavailable', () => {
-    const noTl = assembleMatchReport(loadMatch('WIN_001'), null, PLAYER_PUUID)
+    const noTl = assembleMatchReport(loadMatch('WIN_001'), null, PLAYER_PUUID, new Map())
     const c = buildAnchorCatalog(noTl)
     expect([...c.values()].some((a) => a.kind === 'marker')).toBe(false)
     expect(c.has('stat:kda')).toBe(true) // stats still present

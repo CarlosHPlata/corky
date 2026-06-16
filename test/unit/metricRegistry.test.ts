@@ -3,8 +3,8 @@ import { computeMetric, isComputable, METRIC_KEYS } from '../../src/main/domain/
 import { assembleMatchReport } from '../../src/main/domain/report/assembleMatchReport'
 import { loadMatch, loadTimeline, PLAYER_PUUID } from '../fixtures/load'
 
-const win = assembleMatchReport(loadMatch('WIN_001'), loadTimeline('WIN_001'), PLAYER_PUUID)
-const short = assembleMatchReport(loadMatch('SHORT_003'), loadTimeline('SHORT_003'), PLAYER_PUUID)
+const win = assembleMatchReport(loadMatch('WIN_001'), loadTimeline('WIN_001'), PLAYER_PUUID, new Map())
+const short = assembleMatchReport(loadMatch('SHORT_003'), loadTimeline('SHORT_003'), PLAYER_PUUID, new Map())
 
 describe('metricRegistry', () => {
   it('computes metrics straight off the report', () => {

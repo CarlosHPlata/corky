@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { SummarizeIntoReflection } from '../../src/main/application/commands/SummarizeIntoReflection'
+import { MatchService } from '../../src/main/application/services/Match/MatchService'
 import type { ChatTurn } from '../../src/shared/types'
 import { loadMatch, loadTimeline, PLAYER_PUUID } from '../fixtures/load'
 
@@ -19,8 +20,9 @@ function deps(summarize: ReturnType<typeof vi.fn>) {
     list: () => [], get: () => null, upsert: vi.fn(), delete: vi.fn(), countForMatch: () => 0
   } as never
   const model = { summarizeReflectionText: summarize } as never
-  const itemCatalog = { getItemNames: vi.fn().mockResolvedValue(null) } as never
-  return new SummarizeIntoReflection(matchRepo, reportRepo, goalRepo, reflectionRepo, itemCatalog, model, 'haiku', () => NOW)
+  const itemCatalog = { getItemNames: vi.fn().mockResolvedValue(new Map()) } as never
+  const matchService = new MatchService(matchRepo, reportRepo, goalRepo, reflectionRepo, itemCatalog)
+  return new SummarizeIntoReflection(matchRepo, reflectionRepo, matchService, model, 'haiku', () => NOW)
 }
 
 const TURNS: ChatTurn[] = [

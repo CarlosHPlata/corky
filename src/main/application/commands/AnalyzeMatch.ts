@@ -9,7 +9,7 @@ import type { MatchCoachingModel, BenchmarkRef } from '../ports/MatchCoachingMod
 import type { BenchmarkDataSource } from '../ports/BenchmarkDataSource'
 import type { SessionGoalRepository } from '../ports/SessionGoalRepository'
 import type { CoachingConfigRepository } from '../ports/CoachingConfigRepository'
-import { assembleMatchReport } from '../../domain/report/assembleMatchReport'
+import type { MatchService } from '../services/Match/MatchService'
 import { buildAnchorCatalog, isValidStructuredRef, type AnchorCatalog } from '../../domain/report/anchorCatalog'
 import { renderContextBlocks } from '../../domain/report/contextBlocks'
 import { resolveConfig } from '../../domain/config/coachingConfig'
@@ -37,6 +37,7 @@ export class AnalyzeMatch {
     private readonly matchRepo: MatchRepository,
     private readonly summonerRepo: SummonerRepository,
     private readonly reportRepo: ReportRepository,
+    private readonly matchService: MatchService,
     private readonly model: MatchCoachingModel,
     private readonly benchmarkSource: BenchmarkDataSource,
     private readonly goalRepo: SessionGoalRepository,
@@ -44,26 +45,14 @@ export class AnalyzeMatch {
     private readonly lightModel: string,
     private readonly heavyModel: string,
     private readonly now: () => number = () => Date.now()
-  ) {}
+  ) { }
 
   async execute(matchId: string, opts: AnalyzeMatchOptions = {}): Promise<MatchAnalysis> {
     const account = this.matchRepo.getCurrentAccount()
     if (!account) throw new Error('No synced account')
 
-    const detail = this.matchRepo.getMatchDetail(matchId)
-    if (!detail) throw new Error('Match not stored locally')
-    const rawMatch = JSON.parse(detail.rawJson)
-    const timelineRow = this.matchRepo.getTimeline(matchId)
-    let rawTimeline: unknown | null = null
-    if (timelineRow) {
-      try {
-        rawTimeline = JSON.parse(timelineRow.rawJson)
-      } catch {
-        rawTimeline = null
-      }
-    }
-
-    const report = assembleMatchReport(rawMatch, rawTimeline, account.puuid)
+    const report = await this.matchService.getReport(matchId)
+    if (!report) throw new Error('Match not stored locally')
     const catalog = buildAnchorCatalog(report)
 
     // Resolve the coaching config once (FR — settings): a block feeds the model
@@ -99,8 +88,8 @@ export class AnalyzeMatch {
       ),
       report.timelineAvailable
         ? this.runPass<NarrationOutput>('narration', reuse('narration') as NarrationOutput | undefined, () =>
-            this.model.analyzeNarration(ctx, this.lightModel)
-          )
+          this.model.analyzeNarration(ctx, this.lightModel)
+        )
         : Promise.resolve<PassResult<NarrationOutput>>({ value: null, status: 'skipped' })
     ])
 

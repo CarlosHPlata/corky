@@ -5,7 +5,7 @@ import { assembleMatchReport } from '../../src/main/domain/report/assembleMatchR
 import { loadMatch, loadTimeline, PLAYER_PUUID } from '../fixtures/load'
 import type { StandingFocusTask } from '../../src/shared/types'
 
-const win = assembleMatchReport(loadMatch('WIN_001'), loadTimeline('WIN_001'), PLAYER_PUUID)
+const win = assembleMatchReport(loadMatch('WIN_001'), loadTimeline('WIN_001'), PLAYER_PUUID, new Map())
 
 function task(o: Partial<StandingFocusTask> = {}): StandingFocusTask {
   return {
@@ -22,7 +22,7 @@ describe('evaluateTask', () => {
 
   it('parks a task whose metric was not reached', () => {
     const t = task({ metric: 'gold_at_24', comparator: '>=', target: 0 })
-    const short = assembleMatchReport(loadMatch('SHORT_003'), loadTimeline('SHORT_003'), PLAYER_PUUID)
+    const short = assembleMatchReport(loadMatch('SHORT_003'), loadTimeline('SHORT_003'), PLAYER_PUUID, new Map())
     expect(evaluateTask(t, short).result).toBe('not_applicable')
   })
 

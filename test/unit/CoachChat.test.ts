@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { CoachChat } from '../../src/main/application/commands/CoachChat'
+import { MatchService } from '../../src/main/application/services/Match/MatchService'
 import type { MatchCoachingModel, DiscoveryPlan } from '../../src/main/application/ports/MatchCoachingModel'
 import type { GetHistoryAggregates } from '../../src/main/application/queries/GetHistoryAggregates'
 import type { ChatTurn } from '../../src/shared/types'
@@ -56,11 +57,12 @@ function deps(
   const reflectionRepo = {
     list: () => [], get: () => null, upsert: vi.fn(), delete: vi.fn(), countForMatch: () => 0
   } as never
-  const itemCatalog = { getItemNames: vi.fn().mockResolvedValue(null) } as never
+  const itemCatalog = { getItemNames: vi.fn().mockResolvedValue(new Map()) } as never
+  const matchService = new MatchService(matchRepo, reportRepo, goalRepo, reflectionRepo, itemCatalog)
   return new CoachChat(
-    matchRepo, reportRepo, goalRepo,
+    matchService,
     semanticMemory, getHistoryAggregates, benchmarkSource, insightsSource, coachingConfigRepo,
-    reflectionRepo, itemCatalog, model, 'haiku'
+    model, 'haiku'
   )
 }
 

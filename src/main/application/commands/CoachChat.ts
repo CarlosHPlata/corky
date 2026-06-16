@@ -2,18 +2,13 @@ import type { ChatTurn, CoachChatReply, MatchReport, StandingFocusTask } from '@
 import type { ResolvedCoachingConfig } from '@shared/config'
 import type { MatchRepository } from '../ports/MatchRepository'
 import type { ReportRepository } from '../ports/ReportRepository'
-import type { SessionGoalRepository } from '../ports/SessionGoalRepository'
 import type { MatchCoachingModel, DiscoveryRequest, AgenticChatExtras, AgenticChatResult } from '../ports/MatchCoachingModel'
 import type { SemanticMemory } from '../ports/SemanticMemory'
 import type { BenchmarkDataSource } from '../ports/BenchmarkDataSource'
 import type { ChampionInsightsDataSource } from '../ports/ChampionInsightsDataSource'
 import type { CoachingConfigRepository } from '../ports/CoachingConfigRepository'
-import type { ReflectionRepository } from '../ports/ReflectionRepository'
-import type { ItemCatalog } from '../ports/ItemCatalog'
 import type { GetHistoryAggregates } from '../queries/GetHistoryAggregates'
 import type { SemanticObject } from '../../domain/memory/semanticObject'
-import { assembleMatchReport } from '../../domain/report/assembleMatchReport'
-import { buildCoachBriefing } from '../../domain/report/coachBriefing'
 import { makeRefLineRenderer } from '../../domain/report/resolveChatRefs'
 import { buildAnchorCatalog } from '../../domain/report/anchorCatalog'
 import { resolveConfig } from '../../domain/config/coachingConfig'
@@ -26,6 +21,7 @@ import {
   mintProposalId
 } from '../../domain/chat/proposal'
 import { MatchService } from '../services/Match/MatchService'
+import { Match } from 'src/main/domain/entities/Match'
 
 /** Which config source gates each discovery kind. */
 const SOURCE_FOR_KIND: Record<DiscoveryRequest['kind'], string> = {
@@ -53,30 +49,19 @@ const SOURCE_FOR_KIND: Record<DiscoveryRequest['kind'], string> = {
 export class CoachChat {
   constructor(
     private readonly matchService: MatchService,
-    private readonly matchRepo: MatchRepository, //SQLREpo?
-    private readonly reportRepo: ReportRepository, //SQLREpo
-    private readonly goalRepo: SessionGoalRepository, //SQLITE
     private readonly semanticMemory: SemanticMemory, //SO
     private readonly getHistoryAggregates: GetHistoryAggregates, //Application FUnctionality
     private readonly benchmarkSource: BenchmarkDataSource, //OPGG MCP
     private readonly insightsSource: ChampionInsightsDataSource, //OPGG MCP
     private readonly coachingConfigRepo: CoachingConfigRepository, // SQL
-    private readonly reflectionRepo: ReflectionRepository, // SQL
-    private readonly itemCatalog: ItemCatalog, // RIOT API
     private readonly model: MatchCoachingModel, // LLM
     private readonly chatModel: string,
     private readonly now: () => number = () => Date.now()
   ) { }
 
   async execute(matchId: string, sessionId: string, messages: ChatTurn[]): Promise<CoachChatReply> {
-    const match = this.matchService.getMatch(matchId)
-    const itemNames = await this.itemCatalog.getItemNames() // null offline → id fallback
-    let briefing = buildCoachBriefing(match.report, match.analysis, match.goal, itemNames)
-
-    const dossier = await this.runDiscovery(match.account.puuid, matchId, match.report, messages)
-    if (dossier.length) {
-      briefing += `\n\nDOSSIER (fetched for this question)\n${dossier.join('\n')}`
-    }
+    const match = await this.matchService.getMatch(matchId)
+    const briefing = await this.getBriefingWithDossier(match, messages)
 
     // One pending card at a time: with one already in the transcript, the model
     // is told (and tool calls refused), so this turn can only be conversational.
@@ -118,6 +103,17 @@ export class CoachChat {
       proposal: { id: mintProposalId(sessionId, at), payload, resolution: 'pending' }
     }
     return { reply: result.reply, proposalTurn }
+  }
+
+  private async getBriefingWithDossier(match: Match, messages: ChatTurn[]) {
+    let briefing = match.coachBriefing()
+    const dossier = await this.runDiscovery(match.account.puuid, match.matchId, match.report, messages)
+
+    if (dossier.length) {
+      briefing += `\n\nDOSSIER (fetched for this question)\n${dossier.join('\n')}`
+    }
+
+    return briefing
   }
 
   /** Every id a reflection proposal may cite: report anchors ∪ task:<id>. */
@@ -196,8 +192,8 @@ export class CoachChat {
     const memory = count(
       () => this.semanticMemory.query({ puuid, statuses: ['active', 'confirmed'], limit: 100 }).length
     )
-    const history = count(() => this.matchRepo.countMatches(puuid))
-    const tasks = count(() => this.reportRepo.getStandingTasks(puuid).length)
+    const history = count(() => this.matchService.countMatches(puuid))
+    const tasks = count(() => this.matchService.getStandingTasks(puuid).length)
     const opggOn = config.sources.some((s) => s.id === SOURCE_FOR_KIND.benchmark && s.enabled)
     const benchmark = opggOn ? 'available' : 'off'
     const championBuild = opggOn ? 'available' : 'off'
@@ -226,7 +222,7 @@ export class CoachChat {
           role: report.core.role,
           opponentChampion: report.matchup.laneOpponent?.champion
         }
-        const agg = this.getHistoryAggregates.execute({ ...target, excludeMatchId: matchId })
+        const agg = await this.getHistoryAggregates.execute({ ...target, excludeMatchId: matchId })
         return agg ? [renderHistoryBlock(agg, target)] : []
       }
       if (request.kind === 'benchmark') {
@@ -312,21 +308,6 @@ export class CoachChat {
     })
   }
 
-  private loadReport(matchId: string, puuid: string): MatchReport {
-    const detail = this.matchRepo.getMatchDetail(matchId)
-    if (!detail) throw new Error('Match not stored locally')
-    const rawMatch = JSON.parse(detail.rawJson)
-    const timelineRow = this.matchRepo.getTimeline(matchId)
-    let rawTimeline: unknown | null = null
-    if (timelineRow) {
-      try {
-        rawTimeline = JSON.parse(timelineRow.rawJson)
-      } catch {
-        rawTimeline = null
-      }
-    }
-    return assembleMatchReport(rawMatch, rawTimeline, puuid)
-  }
 }
 
 /** Render one recalled memory object as a compact MEM dossier line,

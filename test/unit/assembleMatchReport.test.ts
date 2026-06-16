@@ -4,7 +4,7 @@ import { loadMatch, loadTimeline, PLAYER_PUUID } from '../fixtures/load'
 
 describe('assembleMatchReport', () => {
   it('assembles the full report for a win', () => {
-    const r = assembleMatchReport(loadMatch('WIN_001'), loadTimeline('WIN_001'), PLAYER_PUUID)
+    const r = assembleMatchReport(loadMatch('WIN_001'), loadTimeline('WIN_001'), PLAYER_PUUID, new Map())
     expect(r.matchId).toBe('EUW1_WIN_001')
     expect(r.core.win).toBe(true)
     expect(r.matchup.laneOpponent?.champion).toBe('Zed')
@@ -17,14 +17,14 @@ describe('assembleMatchReport', () => {
   })
 
   it('assembles a loss with a negative end-game gold curve', () => {
-    const r = assembleMatchReport(loadMatch('LOSS_002'), loadTimeline('LOSS_002'), PLAYER_PUUID)
+    const r = assembleMatchReport(loadMatch('LOSS_002'), loadTimeline('LOSS_002'), PLAYER_PUUID, new Map())
     expect(r.core.win).toBe(false)
     const last = r.timeline!.frames[r.timeline!.frames.length - 1]
     expect(last.goldDiff).toBeLessThan(0)
   })
 
   it('degrades cleanly when the timeline is missing (FR-025)', () => {
-    const r = assembleMatchReport(loadMatch('WIN_001'), null, PLAYER_PUUID)
+    const r = assembleMatchReport(loadMatch('WIN_001'), null, PLAYER_PUUID, new Map())
     expect(r.timelineAvailable).toBe(false)
     expect(r.timeline).toBeNull()
     expect(r.deathMap).toBeNull()

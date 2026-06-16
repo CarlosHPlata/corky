@@ -15,12 +15,14 @@ import { AnthropicMatchCoachingModel } from '../adapters/driven/anthropic/Anthro
 import { OpggMcpClient } from '../adapters/driven/opgg/OpggMcpClient'
 import { OpggBenchmarkDataSource } from '../adapters/driven/opgg/OpggBenchmarkDataSource'
 import { OpggChampionInsightsDataSource } from '../adapters/driven/opgg/OpggChampionInsightsDataSource'
-import { DDragonItemCatalog } from '../adapters/driven/ddragon/DDragonItemCatalog'
+import { DDragonItemCatalog, type ItemSnapshot } from '../adapters/driven/ddragon/DDragonItemCatalog'
+import bundledItemSnapshot from '../adapters/driven/ddragon/itemSnapshot.json'
+import { app as electronApp } from 'electron'
+import { join } from 'node:path'
 import { SyncRecentMatches } from '../application/commands/SyncRecentMatches'
 import { SyncSummonerProfile } from '../application/commands/SyncSummonerProfile'
 import { GetMatchList } from '../application/queries/GetMatchList'
 import { GetMatchPage } from '../application/queries/GetMatchPage'
-import { GetMatchReport } from '../application/queries/GetMatchReport'
 import { GetSummonerProfile } from '../application/queries/GetSummonerProfile'
 import { GetLpHistory } from '../application/queries/GetLpHistory'
 import { GetCoachReport } from '../application/queries/GetCoachReport'
@@ -47,6 +49,7 @@ import { resolveConfig } from '../domain/config/coachingConfig'
 import { GetCoachingConfig } from '../application/queries/GetCoachingConfig'
 import { SaveCoachingConfig } from '../application/commands/SaveCoachingConfig'
 import { RestoreCoachingConfigDefaults } from '../application/commands/RestoreCoachingConfigDefaults'
+import { MatchService } from '../application/services/Match/MatchService'
 import { observed } from './observe'
 
 export function buildContainer() {
@@ -96,8 +99,18 @@ export function buildContainer() {
   const opggClient = new OpggMcpClient()
   const benchmarkSource = new OpggBenchmarkDataSource(opggClient)
   const insightsSource = new OpggChampionInsightsDataSource(opggClient)
-  // Item id → name glossary for the chat briefing (Data Dragon, cached per run).
-  const itemCatalog = ext('ddragon', 'ItemCatalog', new DDragonItemCatalog())
+  // Item id → name resolver. Layered so the report ALWAYS has names: bundled
+  // snapshot ships with the app (first launch / offline), a disk cache in
+  // userData persists the freshest live fetch across runs, and a background
+  // Data Dragon refresh keeps things current. See DDragonItemCatalog.
+  const itemCatalog = ext(
+    'ddragon',
+    'ItemCatalog',
+    new DDragonItemCatalog(
+      bundledItemSnapshot as ItemSnapshot,
+      join(electronApp.getPath('userData'), 'ddragon-items.json')
+    )
+  )
 
   const riotConfig = {
     riotId: config.riotId,
@@ -116,11 +129,16 @@ export function buildContainer() {
 
   const getMatchList = app('GetMatchList', new GetMatchList(matchRepo))
   const getMatchPage = app('GetMatchPage', new GetMatchPage(matchRepo))
-  const getMatchReport = app('GetMatchReport', new GetMatchReport(matchRepo))
   const getSummonerProfile = app('GetSummonerProfile', new GetSummonerProfile(matchRepo, summonerRepo))
   const getLpHistory = app('GetLpHistory', new GetLpHistory(matchRepo, summonerRepo))
   const getCoachReport = app('GetCoachReport', new GetCoachReport(reportRepo))
-  const getHistoryAggregates = app('GetHistoryAggregates', new GetHistoryAggregates(matchRepo))
+  // Centralizes the assembleMatchReport path so every command/query that needs
+  // the factual report (or the full Match bundle) reads through one service.
+  const matchService = app(
+    'MatchService',
+    new MatchService(matchRepo, reportRepo, sessionGoalRepo, reflectionRepo, itemCatalog)
+  )
+  const getHistoryAggregates = app('GetHistoryAggregates', new GetHistoryAggregates(matchRepo, matchService))
   const analyzeSession = app('AnalyzeSession', new AnalyzeSession(
     matchRepo,
     summonerRepo,
@@ -134,6 +152,7 @@ export function buildContainer() {
     matchRepo,
     summonerRepo,
     reportRepo,
+    matchService,
     matchCoachingModel,
     benchmarkSource,
     sessionGoalRepo,
@@ -148,16 +167,12 @@ export function buildContainer() {
   // never put it on the heavy model. (The heavy tier is reserved for the one-shot
   // match analysis passes, not the chat.)
   const coachChat = app('CoachChat', new CoachChat(
-    matchRepo,
-    reportRepo,
-    sessionGoalRepo,
+    matchService,
     semanticMemory,
     getHistoryAggregates,
     benchmarkSource,
     insightsSource,
     coachingConfigRepo,
-    reflectionRepo,
-    itemCatalog,
     matchCoachingModel,
     config.anthropicLightModel
   ))
@@ -165,11 +180,9 @@ export function buildContainer() {
   // fire-and-forget from ResolveProposal's hook — never blocks an accept.
   const distillSessionMemory = app('DistillSessionMemory', new DistillSessionMemory(
     matchRepo,
-    reportRepo,
-    sessionGoalRepo,
     chatSessionRepo,
     semanticMemory,
-    itemCatalog,
+    matchService,
     matchCoachingModel,
     config.anthropicLightModel
   ))
@@ -187,15 +200,13 @@ export function buildContainer() {
         .catch((err) => console.error('memory distillation failed:', err))
     }
   ))
-  const saveReflection = app('SaveReflection', new SaveReflection(matchRepo, reportRepo, reflectionRepo))
+  const saveReflection = app('SaveReflection', new SaveReflection(matchRepo, reportRepo, reflectionRepo, matchService))
   const deleteReflection = app('DeleteReflection', new DeleteReflection(reflectionRepo))
   const listReflections = app('ListReflections', new ListReflections(reflectionRepo))
   const summarizeIntoReflection = app('SummarizeIntoReflection', new SummarizeIntoReflection(
     matchRepo,
-    reportRepo,
-    sessionGoalRepo,
     reflectionRepo,
-    itemCatalog,
+    matchService,
     matchCoachingModel,
     config.anthropicLightModel
   ))
@@ -228,7 +239,7 @@ export function buildContainer() {
     syncSummonerProfile,
     getMatchList,
     getMatchPage,
-    getMatchReport,
+    matchService,
     getSummonerProfile,
     getLpHistory,
     getCoachReport,

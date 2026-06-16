@@ -2,7 +2,7 @@ import type { EvidenceRef, MatchReport, Reflection, SaveReflectionInput } from '
 import type { MatchRepository } from '../ports/MatchRepository'
 import type { ReportRepository } from '../ports/ReportRepository'
 import type { ReflectionRepository } from '../ports/ReflectionRepository'
-import { assembleMatchReport } from '../../domain/report/assembleMatchReport'
+import type { MatchService } from '../services/Match/MatchService'
 import { buildAnchorCatalog } from '../../domain/report/anchorCatalog'
 import { REFLECTION_TEXT_CAP } from '../../domain/chat/proposal'
 
@@ -25,13 +25,14 @@ export class SaveReflection {
     private readonly matchRepo: MatchRepository,
     private readonly reportRepo: ReportRepository,
     private readonly reflections: ReflectionRepository,
+    private readonly matchService: MatchService,
     private readonly now: () => number = () => Date.now()
-  ) {}
+  ) { }
 
-  execute(input: SaveReflectionInput): Reflection {
+  async execute(input: SaveReflectionInput): Promise<Reflection> {
     const text = (input.text ?? '').trim().slice(0, REFLECTION_TEXT_CAP)
     if (!text) throw new Error('A reflection needs some text')
-    const refs = this.filterRefs(input.matchId, input.refs ?? [])
+    const refs = await this.filterRefs(input.matchId, input.refs ?? [])
     const at = this.now()
     const isLegacyAdoption = input.id === `${input.matchId}-refl-legacy`
 
@@ -66,9 +67,10 @@ export class SaveReflection {
 
   /** Keep only refs that resolve in this match: anchor-catalog ids and
    * `task:<id>` ids over the CURRENT standing set. Labels pass through. */
-  private filterRefs(matchId: string, refs: EvidenceRef[]): EvidenceRef[] {
+  private async filterRefs(matchId: string, refs: EvidenceRef[]): Promise<EvidenceRef[]> {
     if (!refs.length) return []
-    const valid = new Set<string>(buildAnchorCatalog(this.loadReport(matchId)).keys())
+    const report = await this.loadReport(matchId)
+    const valid = new Set<string>(buildAnchorCatalog(report).keys())
     const account = this.matchRepo.getCurrentAccount()
     if (account) {
       for (const t of this.reportRepo.getStandingTasks(account.puuid)) valid.add(`task:${t.id}`)
@@ -83,21 +85,9 @@ export class SaveReflection {
       .slice(0, MAX_REFS)
   }
 
-  private loadReport(matchId: string): MatchReport {
-    const account = this.matchRepo.getCurrentAccount()
-    if (!account) throw new Error('No synced account')
-    const detail = this.matchRepo.getMatchDetail(matchId)
-    if (!detail) throw new Error('Match not stored locally')
-    const rawMatch = JSON.parse(detail.rawJson)
-    const timelineRow = this.matchRepo.getTimeline(matchId)
-    let rawTimeline: unknown | null = null
-    if (timelineRow) {
-      try {
-        rawTimeline = JSON.parse(timelineRow.rawJson)
-      } catch {
-        rawTimeline = null
-      }
-    }
-    return assembleMatchReport(rawMatch, rawTimeline, account.puuid)
+  private async loadReport(matchId: string): Promise<MatchReport> {
+    const report = await this.matchService.getReport(matchId)
+    if (!report) throw new Error('Match not stored locally')
+    return report
   }
 }

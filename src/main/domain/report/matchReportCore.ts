@@ -1,4 +1,4 @@
-import type { MatchCore, Matchup, RosterEntry, TeamObjectives } from '@shared/types'
+import type { Item, MatchCore, Matchup, RosterEntry, TeamObjectives } from '@shared/types'
 import { matchInfo, participants, round1, type RawParticipant, type RawTeam } from './raw'
 
 const ROLE_ORDER = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY']
@@ -61,12 +61,13 @@ export function resolveLaneOpponentId(rawMatch: unknown, puuid: string): number 
   return opposed.length === 1 ? opposed[0].participantId ?? null : null
 }
 
-function toRosterEntry(p: RawParticipant, isYou: boolean, isLaneOpponent: boolean): RosterEntry {
+function toRosterEntry(p: RawParticipant, isYou: boolean, isLaneOpponent: boolean, itemNames: ReadonlyMap<number, string>): RosterEntry {
   // The rune page: styles[0] is the primary tree (its first selection is the
   // keystone), styles[1] the secondary tree. Untrusted raw — every step guarded.
   const styles = p.perks?.styles ?? []
   const primary = styles.find((s) => s.description === 'primaryStyle') ?? styles[0]
   const sub = styles.find((s) => s.description === 'subStyle') ?? styles[1]
+  const itemIds = [p.item0 ?? 0, p.item1 ?? 0, p.item2 ?? 0, p.item3 ?? 0, p.item4 ?? 0, p.item5 ?? 0]
 
   return {
     champion: p.championName ?? 'Unknown',
@@ -86,9 +87,18 @@ function toRosterEntry(p: RawParticipant, isYou: boolean, isLaneOpponent: boolea
     keystoneId: primary?.selections?.[0]?.perk ?? null,
     primaryStyleId: primary?.style ?? null,
     subStyleId: sub?.style ?? null,
-    itemIds: [p.item0 ?? 0, p.item1 ?? 0, p.item2 ?? 0, p.item3 ?? 0, p.item4 ?? 0, p.item5 ?? 0],
-    trinketId: p.item6 ?? 0
+    itemIds,
+    trinketId: p.item6 ?? 0,
+    trinket: buildItemsFromIds([p.item6 ?? 0], itemNames)[0],
+    items: buildItemsFromIds(itemIds, itemNames)
   }
+}
+
+function buildItemsFromIds(itemIds: number[], itemNames: ReadonlyMap<number, string>): Item[] {
+  return itemIds.map((id) => ({
+    id,
+    name: itemNames.get(id) ?? 'Unknown'
+  }))
 }
 
 function toObjectives(t: RawTeam | undefined): TeamObjectives | null {
@@ -105,7 +115,7 @@ function toObjectives(t: RawTeam | undefined): TeamObjectives | null {
  * `teamPosition`; when there isn't exactly one (jungle/roam, or a non-lane mode)
  * it resolves to null — stated honestly rather than guessed (FR-012).
  */
-export function extractMatchup(rawMatch: unknown, puuid: string): Matchup {
+export function extractMatchup(rawMatch: unknown, puuid: string, itemNames: ReadonlyMap<number, string>): Matchup {
   const all = participants(rawMatch)
   const you = all.find((p) => p.puuid === puuid)
   const youTeam = you?.teamId ?? 100
@@ -123,17 +133,17 @@ export function extractMatchup(rawMatch: unknown, puuid: string): Matchup {
   const allies = all
     .filter((p) => p.teamId === youTeam)
     .sort(order)
-    .map((p) => toRosterEntry(p, p.puuid === puuid, false))
+    .map((p) => toRosterEntry(p, p.puuid === puuid, false, itemNames))
 
   const enemies = all
     .filter((p) => p.teamId !== youTeam)
     .sort(order)
-    .map((p) => toRosterEntry(p, false, p === laneOppParticipant))
+    .map((p) => toRosterEntry(p, false, p === laneOppParticipant, itemNames))
 
-  const youEntry = allies.find((e) => e.isYou) ?? toRosterEntry(you ?? {}, true, false)
+  const youEntry = allies.find((e) => e.isYou) ?? toRosterEntry(you ?? {}, true, false, itemNames)
 
   const laneOpponent = laneOppParticipant
-    ? toRosterEntry(laneOppParticipant, false, true)
+    ? toRosterEntry(laneOppParticipant, false, true, itemNames)
     : null
 
   const teams = matchInfo(rawMatch).teams ?? []

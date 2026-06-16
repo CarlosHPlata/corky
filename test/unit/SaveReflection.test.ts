@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { SaveReflection } from '../../src/main/application/commands/SaveReflection'
 import { DeleteReflection } from '../../src/main/application/commands/DeleteReflection'
+import { MatchService } from '../../src/main/application/services/Match/MatchService'
 import type { Reflection, StandingFocusTask } from '../../src/shared/types'
 import { loadMatch, loadTimeline, PLAYER_PUUID } from '../fixtures/load'
 
@@ -26,23 +27,26 @@ function makeFakes(existing: Reflection[] = []) {
     getMatchDetail: () => ({ matchId: MATCH, rawJson: JSON.stringify(loadMatch(MATCH)) }),
     getTimeline: () => ({ matchId: MATCH, rawJson: JSON.stringify(loadTimeline(MATCH)) })
   } as never
-  const reportRepo = { getStandingTasks: () => [TASK] } as never
-  const cmd = new SaveReflection(matchRepo, reportRepo, reflections as never, () => NOW)
+  const reportRepo = { getStandingTasks: () => [TASK], getMatchAnalysis: () => null } as never
+  const goalRepo = { get: () => null } as never
+  const itemCatalog = { getItemNames: async () => new Map() } as never
+  const matchService = new MatchService(matchRepo, reportRepo, goalRepo, reflections as never, itemCatalog)
+  const cmd = new SaveReflection(matchRepo, reportRepo, reflections as never, matchService, () => NOW)
   return { cmd, reflections, rows }
 }
 
 describe('SaveReflection', () => {
-  it('creates a player reflection with a collision-proof id', () => {
+  it('creates a player reflection with a collision-proof id', async () => {
     const { cmd } = makeFakes()
-    const r = cmd.execute({ matchId: MATCH, text: '  shove only with vision  ', refs: [] })
+    const r = await cmd.execute({ matchId: MATCH, text: '  shove only with vision  ', refs: [] })
     expect(r.id).toBe(`${MATCH}-refl-${NOW.toString(36)}-0`)
     expect(r.source).toBe('player')
     expect(r.text).toBe('shove only with vision')
   })
 
-  it('keeps valid refs (anchor catalog + task:) and silently drops unknown ones', () => {
+  it('keeps valid refs (anchor catalog + task:) and silently drops unknown ones', async () => {
     const { cmd } = makeFakes()
-    const r = cmd.execute({
+    const r = await cmd.execute({
       matchId: MATCH,
       text: 'note',
       refs: [
@@ -55,42 +59,42 @@ describe('SaveReflection', () => {
     expect(r.refs[0].label).toBe('KDA') // labels pass through
   })
 
-  it('rejects empty text', () => {
+  it('rejects empty text', async () => {
     const { cmd } = makeFakes()
-    expect(() => cmd.execute({ matchId: MATCH, text: '   ', refs: [] })).toThrow(/needs some text/)
+    await expect(cmd.execute({ matchId: MATCH, text: '   ', refs: [] })).rejects.toThrow(/needs some text/)
   })
 
-  it('enforces the 20-per-match cap on create', () => {
+  it('enforces the 20-per-match cap on create', async () => {
     const existing = Array.from({ length: 20 }, (_, i) => ({
       id: `r${i}`, matchId: MATCH, text: 't', refs: [], source: 'player' as const, createdAt: 1, updatedAt: 1
     }))
     const { cmd } = makeFakes(existing)
-    expect(() => cmd.execute({ matchId: MATCH, text: 'one more', refs: [] })).toThrow(/20 reflections/)
+    await expect(cmd.execute({ matchId: MATCH, text: 'one more', refs: [] })).rejects.toThrow(/20 reflections/)
   })
 
-  it('edits preserve author and creation time, bump updatedAt', () => {
+  it('edits preserve author and creation time, bump updatedAt', async () => {
     const coachRow: Reflection = {
       id: 'r1', matchId: MATCH, text: 'old', refs: [], source: 'coach', createdAt: 5, updatedAt: 5
     }
     const { cmd } = makeFakes([coachRow])
-    const r = cmd.execute({ matchId: MATCH, id: 'r1', text: 'edited', refs: [] })
+    const r = await cmd.execute({ matchId: MATCH, id: 'r1', text: 'edited', refs: [] })
     expect(r.source).toBe('coach')
     expect(r.createdAt).toBe(5)
     expect(r.updatedAt).toBe(NOW)
     expect(r.text).toBe('edited')
   })
 
-  it('refuses edits across matches', () => {
+  it('refuses edits across matches', async () => {
     const row: Reflection = { id: 'r1', matchId: 'OTHER', text: 'x', refs: [], source: 'player', createdAt: 1, updatedAt: 1 }
     const { cmd } = makeFakes([row])
-    expect(() => cmd.execute({ matchId: MATCH, id: 'r1', text: 'y', refs: [] })).toThrow(/not found/)
+    await expect(cmd.execute({ matchId: MATCH, id: 'r1', text: 'y', refs: [] })).rejects.toThrow(/not found/)
   })
 
-  it('legacy adoption is idempotent and lands as coach-authored', () => {
+  it('legacy adoption is idempotent and lands as coach-authored', async () => {
     const { cmd } = makeFakes()
-    const first = cmd.execute({ matchId: MATCH, id: `${MATCH}-refl-legacy`, text: 'migrated', refs: [] })
+    const first = await cmd.execute({ matchId: MATCH, id: `${MATCH}-refl-legacy`, text: 'migrated', refs: [] })
     expect(first.source).toBe('coach')
-    const second = cmd.execute({ matchId: MATCH, id: `${MATCH}-refl-legacy`, text: 'changed?', refs: [] })
+    const second = await cmd.execute({ matchId: MATCH, id: `${MATCH}-refl-legacy`, text: 'changed?', refs: [] })
     expect(second.text).toBe('migrated') // no-op: stored row returned
   })
 })

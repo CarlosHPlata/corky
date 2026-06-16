@@ -1,15 +1,11 @@
-import type { MatchReport } from '@shared/types'
 import type { MatchRepository } from '../ports/MatchRepository'
-import type { ReportRepository } from '../ports/ReportRepository'
-import type { SessionGoalRepository } from '../ports/SessionGoalRepository'
 import type { ChatSessionRepository } from '../ports/ChatSessionRepository'
 import type { SemanticMemory } from '../ports/SemanticMemory'
-import type { ItemCatalog } from '../ports/ItemCatalog'
 import type { MatchCoachingModel, ExistingMemoryEntry } from '../ports/MatchCoachingModel'
-import { assembleMatchReport } from '../../domain/report/assembleMatchReport'
-import { buildCoachBriefing } from '../../domain/report/coachBriefing'
+import type { MatchService } from '../services/Match/MatchService'
 import { mergeSemanticObjects } from '../../domain/memory/semanticObject'
 import type { SemanticObject } from '../../domain/memory/semanticObject'
+import { Match } from 'src/main/domain/entities/Match'
 
 /**
  * Memory distillation (spec 005 US5): runs best-effort AFTER a coach-authored
@@ -22,15 +18,13 @@ import type { SemanticObject } from '../../domain/memory/semanticObject'
 export class DistillSessionMemory {
   constructor(
     private readonly matchRepo: MatchRepository,
-    private readonly reportRepo: ReportRepository,
-    private readonly goalRepo: SessionGoalRepository,
     private readonly sessions: ChatSessionRepository,
     private readonly semanticMemory: SemanticMemory,
-    private readonly itemCatalog: ItemCatalog,
+    private readonly matchService: MatchService,
     private readonly model: MatchCoachingModel,
     private readonly chatModel: string,
     private readonly now: () => number = () => Date.now()
-  ) {}
+  ) { }
 
   async execute(matchId: string, sessionId: string): Promise<void> {
     const account = this.matchRepo.getCurrentAccount()
@@ -38,11 +32,8 @@ export class DistillSessionMemory {
     const session = this.sessions.get(sessionId)
     if (!session || session.turns.length === 0) return
 
-    const report = this.loadReport(matchId, account.puuid)
-    const analysis = this.reportRepo.getMatchAnalysis(matchId)
-    const goal = this.goalRepo.get()?.goal?.trim() || undefined
-    const itemNames = await this.itemCatalog.getItemNames() // null offline → id fallback
-    const briefing = buildCoachBriefing(report, analysis, goal, itemNames)
+    const match = await this.loadReport(matchId)
+    const briefing = match.coachBriefing()
 
     const existing = this.semanticMemory.query({
       puuid: account.puuid,
@@ -61,20 +52,10 @@ export class DistillSessionMemory {
     if (upserts.length) this.semanticMemory.upsert(account.puuid, upserts)
   }
 
-  private loadReport(matchId: string, puuid: string): MatchReport {
-    const detail = this.matchRepo.getMatchDetail(matchId)
-    if (!detail) throw new Error('Match not stored locally')
-    const rawMatch = JSON.parse(detail.rawJson)
-    const timelineRow = this.matchRepo.getTimeline(matchId)
-    let rawTimeline: unknown | null = null
-    if (timelineRow) {
-      try {
-        rawTimeline = JSON.parse(timelineRow.rawJson)
-      } catch {
-        rawTimeline = null
-      }
-    }
-    return assembleMatchReport(rawMatch, rawTimeline, puuid)
+  private async loadReport(matchId: string): Promise<Match> {
+    const match = await this.matchService.getMatch(matchId)
+    if (!match) throw new Error('Match not stored locally')
+    return match
   }
 }
 

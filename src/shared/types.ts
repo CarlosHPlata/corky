@@ -42,6 +42,11 @@ export interface MatchPage {
   hasMoreRemote: boolean
 }
 
+export interface Item {
+  id: number
+  name: string
+}
+
 /** A participant line in the matchup roster. */
 export interface RosterEntry {
   champion: string
@@ -70,8 +75,12 @@ export interface RosterEntry {
   subStyleId: number | null
   /** item0–item5, exactly 6 slots; 0 ⇒ empty slot. */
   itemIds: number[]
+  /** item0–item5, exactly 6 slots; 0 ⇒ empty slot. */
+  items: Item[]
   /** item6 (the trinket); 0 ⇒ none. */
   trinketId: number
+  /** item6 (the trinket); 0 ⇒ none. */
+  trinket: Item
 }
 
 /** One team's objective tallies for the scoreboard header. */
@@ -556,23 +565,23 @@ export type ProposalResolution = 'pending' | 'accepted' | 'rejected' | 'stale'
  * a stored proposal is always acceptable modulo staleness. */
 export type ProposalPayload =
   | {
-      kind: 'update_tasks'
-      /** The FULL resulting standing set (1–3), already validated. */
-      set: StandingFocusTask[]
-      /** Explicit retires (subset of the standing set at proposal time). */
-      retireIds: string[]
-      /** Shape signature of the standing set at proposal time (stale check). */
-      baseline: string
-    }
+    kind: 'update_tasks'
+    /** The FULL resulting standing set (1–3), already validated. */
+    set: StandingFocusTask[]
+    /** Explicit retires (subset of the standing set at proposal time). */
+    retireIds: string[]
+    /** Shape signature of the standing set at proposal time (stale check). */
+    baseline: string
+  }
   | { kind: 'create_reflection'; text: string; refs: EvidenceRef[] }
   | {
-      kind: 'update_reflection'
-      reflectionId: string
-      text: string
-      refs: EvidenceRef[]
-      /** Target reflection's updatedAt at proposal time (stale check). */
-      baseline: number
-    }
+    kind: 'update_reflection'
+    reflectionId: string
+    text: string
+    refs: EvidenceRef[]
+    /** Target reflection's updatedAt at proposal time (stale check). */
+    baseline: number
+  }
   | { kind: 'delete_reflection'; reflectionId: string; baseline: number }
 
 /** A coach-suggested state change awaiting the player's decision, embedded in

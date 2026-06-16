@@ -4,7 +4,7 @@ import { buildAnchorCatalog } from '../../src/main/domain/report/anchorCatalog'
 import { assembleMatchReport } from '../../src/main/domain/report/assembleMatchReport'
 import { loadMatch, loadTimeline, PLAYER_PUUID } from '../fixtures/load'
 
-const win = assembleMatchReport(loadMatch('WIN_001'), loadTimeline('WIN_001'), PLAYER_PUUID)
+const win = assembleMatchReport(loadMatch('WIN_001'), loadTimeline('WIN_001'), PLAYER_PUUID, new Map())
 const catalog = buildAnchorCatalog(win)
 
 describe('toCompactContext', () => {
@@ -27,7 +27,7 @@ describe('toCompactContext', () => {
   })
 
   it('renders not-reached breakpoints as n/r, never a fabricated 0', () => {
-    const short = assembleMatchReport(loadMatch('SHORT_003'), loadTimeline('SHORT_003'), PLAYER_PUUID)
+    const short = assembleMatchReport(loadMatch('SHORT_003'), loadTimeline('SHORT_003'), PLAYER_PUUID, new Map())
     const c = buildAnchorCatalog(short)
     const ctx = toCompactContext(short, c)
     // SHORT game never reaches 24:00 → gold_at_24 must be n/r.
@@ -46,7 +46,7 @@ describe('toCompactContext', () => {
   })
 
   it('flags timeline_unavailable when there is no timeline', () => {
-    const noTl = assembleMatchReport(loadMatch('WIN_001'), null, PLAYER_PUUID)
+    const noTl = assembleMatchReport(loadMatch('WIN_001'), null, PLAYER_PUUID, new Map())
     const c = buildAnchorCatalog(noTl)
     expect(toCompactContext(noTl, c)).toContain('timeline_unavailable=true')
   })

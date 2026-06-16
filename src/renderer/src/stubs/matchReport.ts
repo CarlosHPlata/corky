@@ -1,7 +1,7 @@
 // Frontend-first stub data (Constitution VIII). Shapes mirror the `MatchReport`
 // DTO in `@shared/types` exactly, so wiring the backend is a one-line swap in
 // `useMatchReport`. Covers win / loss / no-timeline / zero-deaths states.
-import type { MatchReport, RosterEntry } from '@shared/types'
+import type { Item, MatchReport, RosterEntry } from '@shared/types'
 
 // Per-champion loadout (spells, keystone + trees, full build, trinket) so the
 // scoreboard stub shows the same shape the extractor produces from raw match-v5.
@@ -38,8 +38,15 @@ const LOADOUTS: Record<string, StubLoadout> = {
 
 const NO_LOADOUT: StubLoadout = { summs: [4, 4], key: 8010, pri: 8000, sub: 8100, items: [0, 0, 0, 0, 0, 0], trinket: 3340, name: 'Summoner' }
 
+// The stub has no Data Dragon catalog, so it labels each slot with its id —
+// enough for the scoreboard shape; real names arrive once the backend resolves
+// items in extractMatchup.
+function item(id: number): Item {
+  return { id, name: id ? `Item ${id}` : '' }
+}
+
 function loadout(champion: string, isYou: boolean): Pick<RosterEntry,
-  'riotId' | 'summonerSpellIds' | 'keystoneId' | 'primaryStyleId' | 'subStyleId' | 'itemIds' | 'trinketId'
+  'riotId' | 'summonerSpellIds' | 'keystoneId' | 'primaryStyleId' | 'subStyleId' | 'itemIds' | 'trinketId' | 'items' | 'trinket'
 > {
   const lo = LOADOUTS[champion] ?? NO_LOADOUT
   return {
@@ -49,7 +56,9 @@ function loadout(champion: string, isYou: boolean): Pick<RosterEntry,
     primaryStyleId: lo.pri,
     subStyleId: lo.sub,
     itemIds: [...lo.items],
-    trinketId: lo.trinket
+    trinketId: lo.trinket,
+    items: lo.items.map(item),
+    trinket: item(lo.trinket)
   }
 }
 

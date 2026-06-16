@@ -9,7 +9,7 @@ import { buildAnchorCatalog } from '../../src/main/domain/report/anchorCatalog'
 import { assembleMatchReport } from '../../src/main/domain/report/assembleMatchReport'
 import { loadMatch, loadTimeline, PLAYER_PUUID } from '../fixtures/load'
 
-const win = assembleMatchReport(loadMatch('WIN_001'), loadTimeline('WIN_001'), PLAYER_PUUID)
+const win = assembleMatchReport(loadMatch('WIN_001'), loadTimeline('WIN_001'), PLAYER_PUUID, new Map())
 const catalog = buildAnchorCatalog(win)
 
 const fullExtras: CompactExtras = {
@@ -29,7 +29,7 @@ describe('renderContextBlocks', () => {
       toCompactContext(win, catalog, fullExtras)
     )
     // Also when the timeline is missing (the NOTE path inside match.markers).
-    const noTl = assembleMatchReport(loadMatch('WIN_001'), null, PLAYER_PUUID)
+    const noTl = assembleMatchReport(loadMatch('WIN_001'), null, PLAYER_PUUID, new Map())
     const c = buildAnchorCatalog(noTl)
     expect(renderContextBlocks(noTl, c)).toBe(toCompactContext(noTl, c))
   })
