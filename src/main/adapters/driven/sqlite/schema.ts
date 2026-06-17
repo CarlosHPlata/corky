@@ -10,6 +10,16 @@ export function runMigrations(db: Database.Database): void {
       region      TEXT NOT NULL
     );
 
+    -- Active-player pointer (spec 006). A single row (id=1) naming which stored
+    -- account is currently active. Data is partitioned per puuid everywhere, so
+    -- switching players is just a pointer move. Additive: legacy DBs get this
+    -- empty and fall back to the first account row until first activation.
+    CREATE TABLE IF NOT EXISTS active_player (
+      id         INTEGER PRIMARY KEY CHECK (id = 1),
+      puuid      TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS matches (
       match_id      TEXT PRIMARY KEY,
       puuid         TEXT NOT NULL,

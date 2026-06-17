@@ -23,6 +23,7 @@ import type { ListReflections } from '../../application/queries/ListReflections'
 import type { ResolveProposalInput, SaveReflectionInput } from '@shared/types'
 import type { AnalyzeMatchOptions, ChatTurn } from '@shared/types'
 import type { GetSessionAnalysis } from '../../application/queries/GetSessionAnalysis'
+import type { GetClientStatus } from '../../application/queries/GetClientStatus'
 import type { AnalyzeSession } from '../../application/commands/AnalyzeSession'
 import type { GetSessionGoal } from '../../application/queries/GetSessionGoal'
 import type { SaveSessionGoal } from '../../application/commands/SaveSessionGoal'
@@ -54,6 +55,7 @@ export function registerIpcHandlers(deps: {
   deleteReflection: DeleteReflection
   listReflections: ListReflections
   getSessionAnalysis: GetSessionAnalysis
+  getClientStatus: GetClientStatus
   analyzeSession: AnalyzeSession
   getSessionGoal: GetSessionGoal
   saveSessionGoal: SaveSessionGoal
@@ -83,6 +85,12 @@ export function registerIpcHandlers(deps: {
 
   ipcMain.handle('summoner:get', () => {
     return deps.getSummonerProfile.execute()
+  })
+
+  // League client identity (spec 006). The live `identity:changed` push is sent
+  // directly to the renderer by LcuEventListener; this is the on-demand read.
+  ipcMain.handle('identity:status', () => {
+    return deps.getClientStatus.execute()
   })
 
   ipcMain.handle('summoner:lp-history', () => {

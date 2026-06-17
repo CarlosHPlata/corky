@@ -50,6 +50,10 @@ import { GetCoachingConfig } from '../application/queries/GetCoachingConfig'
 import { SaveCoachingConfig } from '../application/commands/SaveCoachingConfig'
 import { RestoreCoachingConfigDefaults } from '../application/commands/RestoreCoachingConfigDefaults'
 import { MatchService } from '../application/services/Match/MatchService'
+import { IdentityService } from '../application/services/Identity/IdentityService'
+import { LcuLeagueClientGateway } from '../adapters/driven/lcu/LcuLeagueClientGateway'
+import { GetClientStatus } from '../application/queries/GetClientStatus'
+import { LcuEventListener } from '../adapters/driving/LcuEventListener'
 import { observed } from './observe'
 
 export function buildContainer() {
@@ -112,20 +116,26 @@ export function buildContainer() {
     )
   )
 
-  const riotConfig = {
-    riotId: config.riotId,
-    platform: config.platform,
-    region: config.region
-  }
+  // League client identity (spec 006). The active player comes from the live
+  // League client (or the cached last-known player), resolved by IdentityService.
+  // The LCU adapter reads the player's own identity over the lockfile-authed
+  // loopback API; the listener pushes identity changes to the renderer.
+  const leagueClient = new LcuLeagueClientGateway()
+  const identityService = app(
+    'IdentityService',
+    new IdentityService(leagueClient, matchRepo, {
+      devSeed: config.devSeed,
+      accountResolver: riotClient
+    })
+  )
+  const getClientStatus = app('GetClientStatus', new GetClientStatus(identityService))
+  const lcuEventListener = new LcuEventListener(identityService)
 
-  const syncRecentMatches = app('SyncRecentMatches', new SyncRecentMatches(riotClient, matchRepo, riotConfig))
-  const syncSummonerProfile = app('SyncSummonerProfile', new SyncSummonerProfile(
-    riotClient,
-    riotClient,
-    matchRepo,
-    summonerRepo,
-    riotConfig
-  ))
+  const syncRecentMatches = app('SyncRecentMatches', new SyncRecentMatches(riotClient, matchRepo))
+  const syncSummonerProfile = app(
+    'SyncSummonerProfile',
+    new SyncSummonerProfile(riotClient, matchRepo, summonerRepo)
+  )
 
   const getMatchList = app('GetMatchList', new GetMatchList(matchRepo))
   const getMatchPage = app('GetMatchPage', new GetMatchPage(matchRepo))
@@ -240,6 +250,10 @@ export function buildContainer() {
     getMatchList,
     getMatchPage,
     matchService,
+    identityService,
+    getClientStatus,
+    leagueClient,
+    lcuEventListener,
     getSummonerProfile,
     getLpHistory,
     getCoachReport,

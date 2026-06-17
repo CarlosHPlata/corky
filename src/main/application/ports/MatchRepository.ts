@@ -12,8 +12,15 @@ export interface MatchPageOptions {
 export interface MatchRepository {
   upsertAccount(account: Account): void
   getAccount(puuid: string): Account | null
-  /** The single stored account for this single-user app, if synced yet. */
+  /** The active player's account (spec 006): resolves via the active-player
+   *  pointer, falling back to the first stored account for legacy (pre-pointer)
+   *  databases. Null until any account is synced. */
   getCurrentAccount(): Account | null
+  /** Move the active-player pointer (spec 006). Switching accounts is a pointer
+   *  move; the previous player's rows are left intact. */
+  setActivePlayer(puuid: string): void
+  /** The active player's puuid, or null when no pointer is set yet. */
+  getActivePlayer(): string | null
   insertMatch(summary: MatchSummary, rawJson: string): void
   hasMatch(matchId: string): boolean
   listMatches(puuid: string): MatchSummary[]

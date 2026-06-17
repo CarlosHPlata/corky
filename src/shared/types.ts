@@ -6,6 +6,34 @@ export interface Account {
   region: string
 }
 
+// --- League client identity (spec 006) ---
+
+/** The player Corky is currently coaching, independent of where the identity
+ *  came from (live client or local cache). `puuid` is the join key to all
+ *  stored data; `platform`/`region` carry Riot Web API routing. */
+export interface PlayerIdentity {
+  puuid: string
+  gameName: string
+  tagLine: string
+  platform: string
+  region: string
+}
+
+/** Live state of Corky's link to the local League client.
+ *  - `connected`    — client running, a player is logged in
+ *  - `loggedOut`    — client running, login screen (no live identity)
+ *  - `disconnected` — no client running
+ *  - `unreadable`   — client running but identity could not be read */
+export type ClientConnection = 'connected' | 'loggedOut' | 'disconnected' | 'unreadable'
+
+/** Renderer-facing snapshot of connection + the identity being shown.
+ *  `player === null` ⇒ onboarding (no live player and nothing cached). */
+export interface ClientStatus {
+  connection: ClientConnection
+  source: 'client' | 'cache' | 'none'
+  player: PlayerIdentity | null
+}
+
 export interface MatchSummary {
   matchId: string
   puuid: string
@@ -676,4 +704,11 @@ export interface IpcApi {
   ) => Promise<import('./config').ResolvedCoachingConfig>
   /** Drop every override — sources, blocks and tier back to install defaults. */
   restoreCoachingConfigDefaults: () => Promise<import('./config').ResolvedCoachingConfig>
+  /** Current connection + active-player status (spec 006). Drives the status
+   *  chip and the onboarding gate. Cheap read of the cached service status. */
+  getClientStatus: () => Promise<ClientStatus>
+  /** Subscribe to identity/connection changes pushed from the main process when
+   *  the active player switches or the client state changes. Returns an
+   *  unsubscribe fn. The renderer re-bootstraps when a player is delivered. */
+  onIdentityChanged: (cb: (status: ClientStatus) => void) => () => void
 }

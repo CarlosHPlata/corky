@@ -1,35 +1,25 @@
 import type { SummonerProfile } from '@shared/types'
-import type { MatchDataSource } from '../ports/MatchDataSource'
 import type { MatchRepository } from '../ports/MatchRepository'
 import type { SummonerDataSource } from '../ports/SummonerDataSource'
 import type { SummonerRepository } from '../ports/SummonerRepository'
 
-export interface SyncSummonerProfileConfig {
-  riotId: string
-  platform: string
-  region: string
-}
-
 export class SyncSummonerProfile {
   constructor(
-    private readonly accountSource: MatchDataSource,
     private readonly summonerSource: SummonerDataSource,
     private readonly matchRepo: MatchRepository,
-    private readonly summonerRepo: SummonerRepository,
-    private readonly config: SyncSummonerProfileConfig
+    private readonly summonerRepo: SummonerRepository
   ) {}
 
   async execute(): Promise<void> {
-    const account = await this.accountSource.resolveAccount(
-      this.config.riotId,
-      this.config.platform,
-      this.config.region
-    )
-    this.matchRepo.upsertAccount(account)
+    // Operate on the active player (spec 006). The League client detection (or
+    // the cached last-known player) already persisted the account + region/
+    // platform, so we no longer re-resolve the account from static config.
+    const account = this.matchRepo.getCurrentAccount()
+    if (!account) return // no active player yet (onboarding)
 
     const [profileData, soloRank] = await Promise.all([
-      this.summonerSource.fetchProfile(account.puuid, this.config.platform),
-      this.summonerSource.fetchSoloRank(account.puuid, this.config.platform)
+      this.summonerSource.fetchProfile(account.puuid, account.platform),
+      this.summonerSource.fetchSoloRank(account.puuid, account.platform)
     ])
 
     const profile: SummonerProfile = {

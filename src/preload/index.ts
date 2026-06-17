@@ -5,7 +5,7 @@ import type {
   SessionGoal, SessionGoalInput, MatchAnalysis, AnalyzeMatchOptions,
   ChatTurn, CoachChatReply, StandingFocusTask, ProgressSummary,
   ChatSession, ChatSessionMeta, ResolveProposalInput, ResolveProposalOutcome,
-  Reflection, SaveReflectionInput
+  Reflection, SaveReflectionInput, ClientStatus
 } from '../shared/types'
 import type { ResolvedCoachingConfig, SaveCoachingConfigInput } from '../shared/config'
 
@@ -54,7 +54,15 @@ const api: IpcApi = {
   saveCoachingConfig: (input: SaveCoachingConfigInput): Promise<ResolvedCoachingConfig> =>
     ipcRenderer.invoke('config:coaching:save', input),
   restoreCoachingConfigDefaults: (): Promise<ResolvedCoachingConfig> =>
-    ipcRenderer.invoke('config:coaching:restore')
+    ipcRenderer.invoke('config:coaching:restore'),
+  getClientStatus: (): Promise<ClientStatus> => ipcRenderer.invoke('identity:status'),
+  onIdentityChanged: (cb: (status: ClientStatus) => void): (() => void) => {
+    const handler = (_e: unknown, status: ClientStatus): void => cb(status)
+    ipcRenderer.on('identity:changed', handler)
+    return () => {
+      ipcRenderer.removeListener('identity:changed', handler)
+    }
+  }
 }
 
 contextBridge.exposeInMainWorld('api', api)

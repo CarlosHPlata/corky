@@ -2,30 +2,22 @@ import type { MatchDataSource } from '../ports/MatchDataSource'
 import type { MatchRepository } from '../ports/MatchRepository'
 import { extractMatchSummary } from '../../domain/matchSummary'
 
-export interface SyncRecentMatchesConfig {
-  riotId: string
-  platform: string
-  region: string
-}
-
 export class SyncRecentMatches {
   constructor(
     private readonly dataSource: MatchDataSource,
-    private readonly repository: MatchRepository,
-    private readonly config: SyncRecentMatchesConfig
+    private readonly repository: MatchRepository
   ) {}
 
   async execute(count: number, start = 0): Promise<void> {
-    const account = await this.dataSource.resolveAccount(
-      this.config.riotId,
-      this.config.platform,
-      this.config.region
-    )
-    this.repository.upsertAccount(account)
+    // Identity now comes from the active player (spec 006): the League client
+    // detection (or the cached last-known player) already resolved + persisted
+    // the account, so we read it here instead of re-resolving from static config.
+    const account = this.repository.getCurrentAccount()
+    if (!account) return // no active player yet (onboarding) — nothing to sync
 
     const matchIds = await this.dataSource.listMatchIds(
       account.puuid,
-      this.config.region,
+      account.region,
       count,
       start
     )
@@ -33,8 +25,8 @@ export class SyncRecentMatches {
 
     for (const matchId of unseen) {
       const [detail, timeline] = await Promise.all([
-        this.dataSource.fetchMatchDetail(matchId, this.config.region),
-        this.dataSource.fetchTimeline(matchId, this.config.region)
+        this.dataSource.fetchMatchDetail(matchId, account.region),
+        this.dataSource.fetchTimeline(matchId, account.region)
       ])
 
       const raw = JSON.parse(detail.rawJson)

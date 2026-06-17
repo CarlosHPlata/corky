@@ -35,6 +35,10 @@ export function useAppData(): AppData {
   // Guards against overlapping syncs (interval firing while one is in flight,
   // or React StrictMode double-invoking the mount effect in dev).
   const syncingRef = useRef(false)
+  // The active player's puuid as last loaded — so an identity push only triggers
+  // a full reload when the player actually switches (spec 006), not on every
+  // connection blip.
+  const lastPuuidRef = useRef<string | null>(null)
 
   const refresh = useCallback(async () => {
     const [p, m, lp] = await Promise.all([
@@ -45,6 +49,7 @@ export function useAppData(): AppData {
     setProfile(p)
     setMatches(m)
     setLpHistory(lp)
+    lastPuuidRef.current = p?.puuid ?? null
   }, [])
 
   const sync = useCallback(async () => {
@@ -79,10 +84,31 @@ export function useAppData(): AppData {
     }
     void init()
 
+    // Reload the whole app for whoever logs into the League client (spec 006).
+    // Only re-bootstrap when the active player's puuid actually changes.
+    const unsubscribeIdentity = window.api.onIdentityChanged((status) => {
+      const puuid = status.player?.puuid ?? null
+      if (puuid && puuid !== lastPuuidRef.current) {
+        lastPuuidRef.current = puuid
+        void (async () => {
+          try {
+            await refresh()
+          } catch (e) {
+            setError(message(e))
+          }
+          void sync()
+        })()
+      } else if (!puuid) {
+        // Logged out / onboarding — keep the cached view; a later login re-triggers.
+        lastPuuidRef.current = null
+      }
+    })
+
     const id = setInterval(() => void sync(), SYNC_INTERVAL_MS)
     return () => {
       cancelled = true
       clearInterval(id)
+      unsubscribeIdentity()
     }
   }, [refresh, sync])
 

@@ -9,9 +9,12 @@ import { Trends } from './screens/Trends'
 import { Settings } from './screens/Settings'
 import { Home } from './screens/Home'
 import { useAppData } from './data/useAppData'
+import { useClientStatus } from './data/useClientStatus'
+import { ClientStatusChip } from './components/ClientStatusChip'
+import { ConnectClientPanel } from './components/ConnectClientPanel'
 import { rankLabel } from './utils/format'
 import { profileIconUrl } from './utils/ddragon'
-import type { SummonerProfile } from '@shared/types'
+import type { SummonerProfile, ClientStatus } from '@shared/types'
 
 type Screen = 'home' | 'history' | 'report' | 'champ' | 'trends' | 'settings'
 
@@ -102,12 +105,13 @@ function Sidebar({ screen, onNav, profile, matchCount }: {
   )
 }
 
-function TopBar({ title, subtitle, onSync, syncing, left }: {
+function TopBar({ title, subtitle, onSync, syncing, left, status }: {
   title: string
   subtitle?: string | null
   onSync?: () => void
   syncing?: boolean
   left?: React.ReactNode
+  status?: ClientStatus | null
 }) {
   return (
     <header style={{
@@ -122,6 +126,7 @@ function TopBar({ title, subtitle, onSync, syncing, left }: {
         {subtitle && <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--text-muted)' }}>{subtitle}</div>}
       </div>
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <ClientStatusChip status={status} />
         {onSync && (
           <Button variant="secondary" size="sm" onClick={onSync} disabled={syncing}
             iconLeft={<Icon name="refresh-cw" size={15} className={syncing ? 'ck-spin' : ''} />}>
@@ -139,6 +144,7 @@ export default function App() {
   const [analyzed, setAnalyzed] = useState<Record<string, boolean>>({})
 
   const data = useAppData()
+  const { status } = useClientStatus()
 
   function nav(id: Screen) { setScreen(id); if (id !== 'report') setMatchId(null) }
   function openMatch(id: string) { setMatchId(id); setScreen('report') }
@@ -159,10 +165,14 @@ export default function App() {
     ? <Button variant="ghost" size="sm" onClick={() => nav('history')} iconLeft={<Icon name="chevron-left" size={16} />}>Back</Button>
     : undefined
 
-  const key = screen === 'report' ? `report-${matchId ?? 'x'}` : screen
+  // No live player and nothing cached → onboarding instead of the data screens
+  // (spec 006, US3). A login swaps this out automatically via the identity push.
+  const onboarding = status?.source === 'none'
+  const key = onboarding ? 'onboarding' : screen === 'report' ? `report-${matchId ?? 'x'}` : screen
 
   let body: React.ReactNode
-  if (screen === 'home') body = <Home data={data} onOpen={openMatch} onNav={nav} />
+  if (onboarding) body = <ConnectClientPanel />
+  else if (screen === 'home') body = <Home data={data} onOpen={openMatch} onNav={nav} />
   else if (screen === 'history') body = <MatchHistory onOpen={openMatch} />
   else if (screen === 'report' && matchId) body = <CoachReport matchId={matchId} analyzed={!!analyzed[matchId]} onAnalyzed={() => setAnalyzed(a => ({ ...a, [matchId]: true }))} />
   else if (screen === 'champ') body = <ChampSelect />
@@ -173,7 +183,7 @@ export default function App() {
     <>
       <Sidebar screen={screen} onNav={nav} profile={data.profile} matchCount={data.matches.length} />
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <TopBar title={title} subtitle={subtitle} onSync={showSync ? data.sync : undefined} syncing={data.syncing} left={backBtn} />
+        <TopBar title={title} subtitle={subtitle} onSync={showSync ? data.sync : undefined} syncing={data.syncing} left={backBtn} status={status} />
         <div className="ck-scroll">
           <div key={key} className="ck-fade">{body}</div>
         </div>

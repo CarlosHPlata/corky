@@ -33,10 +33,33 @@ export class SqliteMatchRepository implements MatchRepository {
   }
 
   getCurrentAccount(): Account | null {
+    // Active-player pointer (spec 006) → that account; else fall back to the
+    // first stored account for legacy (pre-pointer) databases.
+    const active = this.getActivePlayer()
+    if (active) {
+      const byPuuid = this.getAccount(active)
+      if (byPuuid) return byPuuid
+    }
     const row = this.db
       .prepare('SELECT * FROM account LIMIT 1')
       .get() as Record<string, string> | undefined
     return row ? toAccount(row) : null
+  }
+
+  setActivePlayer(puuid: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO active_player (id, puuid, updated_at) VALUES (1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET puuid = excluded.puuid, updated_at = excluded.updated_at`
+      )
+      .run(puuid, Date.now())
+  }
+
+  getActivePlayer(): string | null {
+    const row = this.db
+      .prepare('SELECT puuid FROM active_player WHERE id = 1')
+      .get() as { puuid: string } | undefined
+    return row ? row.puuid : null
   }
 
   insertMatch(summary: MatchSummary, rawJson: string): void {

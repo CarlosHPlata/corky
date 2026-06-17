@@ -11,12 +11,24 @@ function require(key: string): string {
   return val
 }
 
+// Identity now comes from the live League client (spec 006). RIOT_ID/PLATFORM/
+// REGION are no longer required — they survive only as an OPTIONAL dev seed,
+// used solely when there is no client AND no cached player, and always
+// superseded by a detected/known player. See research §6.
+const seedRiotId = process.env.RIOT_ID
+const devSeed = seedRiotId
+  ? {
+      riotId: seedRiotId,
+      platform: process.env.PLATFORM ?? 'euw1',
+      region: process.env.REGION ?? 'europe'
+    }
+  : undefined
+
 export const config = {
   riotApiKey: require('RIOT_API_KEY'),
   anthropicApiKey: require('ANTHROPIC_API_KEY'),
-  riotId: require('RIOT_ID'),
-  platform: process.env.PLATFORM ?? 'euw1',
-  region: process.env.REGION ?? 'europe',
+  /** Optional dev-only identity seed; undefined in the normal client-driven flow. */
+  devSeed,
   anthropicModel: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6',
   // Two-tier match analysis (spec 004): a cheap/fast model for the decoration
   // passes (caveats/framing, highlight narration) and a strong model for the

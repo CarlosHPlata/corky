@@ -5,7 +5,9 @@ import { buildContainer } from './infrastructure/container'
 import { registerTelemetryConsoleLogger } from './infrastructure/telemetryLogger'
 import { registerIpcHandlers } from './adapters/driving/IpcController'
 
-function createWindow(): void {
+let container: ReturnType<typeof buildContainer> | null = null
+
+function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -28,6 +30,8 @@ function createWindow(): void {
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  return win
 }
 
 app.whenReady().then(() => {
@@ -35,13 +39,23 @@ app.whenReady().then(() => {
     // Subscribe the console observer BEFORE the container wires the observed
     // proxies, so even initialisation-time calls are visible.
     registerTelemetryConsoleLogger()
-    const container = buildContainer()
+    container = buildContainer()
     registerIpcHandlers(container)
   } catch (err) {
     console.error('Failed to initialise Corky:', err)
   }
 
-  createWindow()
+  const win = createWindow()
+
+  // League client identity (spec 006): bind the renderer push to this window,
+  // then begin detecting the active player from the live League client. When a
+  // player logs in, the listener pushes `identity:changed` and the app reloads.
+  if (container) {
+    container.lcuEventListener.bind(win)
+    container.identityService
+      .start()
+      .catch((err) => console.error('identity service failed to start:', err))
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -49,6 +63,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  container?.identityService.stop()
   closeDatabase()
   if (process.platform !== 'darwin') app.quit()
 })
