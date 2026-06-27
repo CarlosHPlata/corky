@@ -641,6 +641,88 @@ export interface ResolveProposalOutcome {
   reflection: Reflection | null
 }
 
+// --- Live champ select (spec 007) ---
+
+/** One player slot in champ select. Numeric ids (champion/spells) are resolved
+ *  to names + icons in the renderer via Data Dragon; the main process keeps the
+ *  DTO structural. Enemy identities stay hidden until they pick (Principle I). */
+export interface ChampSelectPlayer {
+  cellId: number
+  team: 'ally' | 'enemy'
+  isLocalPlayer: boolean
+  /** 'top' | 'jungle' | 'middle' | 'bottom' | 'utility'; '' when hidden/unassigned. */
+  assignedPosition: string
+  /** Locked/picked champion id; 0 until shown. */
+  championId: number
+  /** Hovered (intended) champion id before lock; 0 when none. */
+  championPickIntent: number
+  /** Riot ID game name; '' when hidden (enemy team before reveal). */
+  gameName: string
+  tagLine: string
+  /** [spell1Id, spell2Id]; 0 ⇒ unknown. */
+  summonerSpellIds: number[]
+  /** This cell has an in-progress pick/ban action right now. */
+  isActing: boolean
+}
+
+export interface ChampSelectBan {
+  championId: number
+  team: 'ally' | 'enemy'
+}
+
+/** The local player's selected rune page — only your OWN runes are visible. */
+export interface ChampSelectRunes {
+  primaryStyleId: number
+  subStyleId: number
+  selectedPerkIds: number[]
+}
+
+/** OP.GG champion build for the locked champion (slice 2). Mirrors the
+ *  ChampionInsightsDataSource shape, kept in shared so it can ride the DTO. */
+export interface ChampSelectBuild {
+  champion: string
+  position: string
+  patch?: string
+  coreItems: string[]
+  startItems: string[]
+  keystone: string
+  primaryTree: string
+  secondaryTree?: string
+  skillOrder?: string
+  summonerSpells?: string[]
+}
+
+/** OP.GG lane matchup vs the inferred enemy laner (slice 2). */
+export interface ChampSelectMatchup {
+  champion: string
+  opponent: string
+  position: string
+  difficulty?: string
+  tips: string[]
+  counterItems?: string[]
+}
+
+/** Live champ-select state (spec 007) — ONE DTO carrying bans, picks, positions,
+ *  summoners and runes. The renderer resolves ids→names/icons; the same object
+ *  later feeds the OP.GG/LLM layer. `build`/`matchup` populate on later pushes. */
+export interface ChampSelectState {
+  active: boolean
+  /** Timer phase, e.g. 'PLANNING' | 'BAN_PICK' | 'FINALIZATION'; '' when idle. */
+  phase: string
+  /** Whole seconds left in the current phase; 0 when unknown. */
+  timeLeftSec: number
+  localPlayerCellId: number
+  allies: ChampSelectPlayer[]
+  enemies: ChampSelectPlayer[]
+  bans: ChampSelectBan[]
+  /** Your own rune page; null when unreadable. */
+  localRunes: ChampSelectRunes | null
+  /** OP.GG build for your locked champion; null until available (slice 2). */
+  build: ChampSelectBuild | null
+  /** OP.GG matchup vs the inferred enemy laner; null until available (slice 2). */
+  matchup: ChampSelectMatchup | null
+}
+
 export interface IpcApi {
   /** `start` fetches an older Riot window (match-v5 offset) for infinite scroll. */
   syncMatches: (count: number, start?: number) => Promise<void>
@@ -711,4 +793,11 @@ export interface IpcApi {
    *  the active player switches or the client state changes. Returns an
    *  unsubscribe fn. The renderer re-bootstraps when a player is delivered. */
   onIdentityChanged: (cb: (status: ClientStatus) => void) => () => void
+  /** Current live champ-select state, or null when not in champ select (spec 007).
+   *  Cheap read of the cached service state for first paint. */
+  getChampSelectState: () => Promise<ChampSelectState | null>
+  /** Subscribe to live champ-select updates pushed from the main process as picks
+   *  and bans progress. Returns an unsubscribe fn. The renderer navigates to the
+   *  Champ Select screen while `active`. */
+  onChampSelectChanged: (cb: (state: ChampSelectState) => void) => () => void
 }

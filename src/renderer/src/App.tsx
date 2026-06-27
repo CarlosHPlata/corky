@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Avatar } from './components/core/Avatar'
 import { Button } from './components/core/Button'
 import { Icon } from './components/Icon'
@@ -10,6 +10,7 @@ import { Settings } from './screens/Settings'
 import { Home } from './screens/Home'
 import { useAppData } from './data/useAppData'
 import { useClientStatus } from './data/useClientStatus'
+import { useChampSelect } from './data/useChampSelect'
 import { ClientStatusChip } from './components/ClientStatusChip'
 import { ConnectClientPanel } from './components/ConnectClientPanel'
 import { rankLabel } from './utils/format'
@@ -145,6 +146,16 @@ export default function App() {
 
   const data = useAppData()
   const { status } = useClientStatus()
+  const champSelect = useChampSelect()
+
+  // Jump to the Champ Select screen the moment a champ select opens (spec 007,
+  // point 1). The window is also brought to the front by the main process.
+  const champWasActive = useRef(false)
+  useEffect(() => {
+    const active = champSelect.state != null
+    if (active && !champWasActive.current) setScreen('champ')
+    champWasActive.current = active
+  }, [champSelect.state])
 
   function nav(id: Screen) { setScreen(id); if (id !== 'report') setMatchId(null) }
   function openMatch(id: string) { setMatchId(id); setScreen('report') }
@@ -175,7 +186,7 @@ export default function App() {
   else if (screen === 'home') body = <Home data={data} onOpen={openMatch} onNav={nav} />
   else if (screen === 'history') body = <MatchHistory onOpen={openMatch} />
   else if (screen === 'report' && matchId) body = <CoachReport matchId={matchId} analyzed={!!analyzed[matchId]} onAnalyzed={() => setAnalyzed(a => ({ ...a, [matchId]: true }))} />
-  else if (screen === 'champ') body = <ChampSelect />
+  else if (screen === 'champ') body = <ChampSelect data={champSelect} />
   else if (screen === 'trends') body = <Trends />
   else body = <Settings />
 

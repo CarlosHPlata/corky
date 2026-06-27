@@ -4,26 +4,40 @@ import type {
   LeagueClientGateway
 } from '../../../application/ports/LeagueClientGateway'
 import { mapRegion } from '../../../domain/identity/region'
-import { LockfileSource } from './lockfileSource'
+import type { LockfileSource } from './lockfileSource'
 import { lcuGet } from './lcuHttp'
+import type { LcuConnectionService, LcuConnectionState } from './LcuConnectionService'
 
-const POLL_MS = 40000
-// const POLL_MS = 99999999
+/** While the client stays up, re-snapshot identity on this slow cadence so an
+ *  account switch on a never-closed client is still picked up. Connection
+ *  up/down edges arrive instantly from the observer; this only catches the
+ *  rarer same-client login change, and runs ONLY while up (no idle polling). */
+const IDENTITY_RECHECK_MS = 30_000
 
 /**
  * The League client (LCU) adapter (spec 006) — Corky's first local-client
  * integration. Implements `LeagueClientGateway` by lockfile-authenticated
- * loopback reads of `current-summoner` + `region-locale`, with a debounced poll
- * driving `subscribe`. A WebSocket upgrade later keeps this same contract.
+ * loopback reads of `current-summoner` + `region-locale`.
+ *
+ * Connection detection (spec 007) is delegated to the shared
+ * `LcuConnectionService` observer: this gateway no longer runs its own fixed
+ * poll. It reacts to the observer's up/down edges — a present lockfile alone is
+ * not enough, the observer confirms the API is actually serving — re-snapshots
+ * identity on each, and keeps a slow re-check only while up.
  *
  * Reads ONLY the player's own identity/region (Principle I). Never throws across
  * the port — every expected condition maps to a `ClientConnection` state.
  */
 export class LcuLeagueClientGateway implements LeagueClientGateway {
-  private readonly lockfile = new LockfileSource()
-  private timer: ReturnType<typeof setInterval> | null = null
   private cb: ((snapshot: ClientSnapshot) => void) | null = null
+  private unsubscribeConnection: (() => void) | null = null
+  private recheck: ReturnType<typeof setInterval> | null = null
   private lastSignature = 'disconnected:'
+
+  constructor(
+    private readonly lockfile: LockfileSource,
+    private readonly connection: LcuConnectionService
+  ) {}
 
   async snapshot(): Promise<ClientSnapshot> {
     const info = await this.lockfile.read()
@@ -82,13 +96,37 @@ export class LcuLeagueClientGateway implements LeagueClientGateway {
   }
 
   startClientPolling(): void {
-    if (this.timer) return
-    this.timer = setInterval(() => void this.poll(), POLL_MS)
+    if (this.unsubscribeConnection) return
+    // React to the shared connection observer rather than a standalone timer.
+    // The observer owns lifecycle (start/stop); we only listen for edges. Read
+    // the current state once so an already-established connection is picked up.
+    this.unsubscribeConnection = this.connection.subscribe((s) => this.onConnectionState(s))
+    this.onConnectionState(this.connection.current())
   }
 
   stopClientPolling(): void {
-    if (this.timer) clearInterval(this.timer)
-    this.timer = null
+    this.unsubscribeConnection?.()
+    this.unsubscribeConnection = null
+    this.clearRecheck()
+  }
+
+  private onConnectionState(state: LcuConnectionState): void {
+    // 'starting' is the transient startup window — don't surface a flash of
+    // 'unreadable'; wait for the observer to settle on up or down.
+    if (state.status === 'starting') return
+    void this.poll()
+    if (state.status === 'up') this.ensureRecheck()
+    else this.clearRecheck()
+  }
+
+  private ensureRecheck(): void {
+    if (this.recheck) return
+    this.recheck = setInterval(() => void this.poll(), IDENTITY_RECHECK_MS)
+  }
+
+  private clearRecheck(): void {
+    if (this.recheck) clearInterval(this.recheck)
+    this.recheck = null
   }
 
   private async poll(): Promise<void> {

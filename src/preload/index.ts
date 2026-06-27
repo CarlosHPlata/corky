@@ -5,7 +5,7 @@ import type {
   SessionGoal, SessionGoalInput, MatchAnalysis, AnalyzeMatchOptions,
   ChatTurn, CoachChatReply, StandingFocusTask, ProgressSummary,
   ChatSession, ChatSessionMeta, ResolveProposalInput, ResolveProposalOutcome,
-  Reflection, SaveReflectionInput, ClientStatus
+  Reflection, SaveReflectionInput, ClientStatus, ChampSelectState
 } from '../shared/types'
 import type { ResolvedCoachingConfig, SaveCoachingConfigInput } from '../shared/config'
 
@@ -61,6 +61,15 @@ const api: IpcApi = {
     ipcRenderer.on('identity:changed', handler)
     return () => {
       ipcRenderer.removeListener('identity:changed', handler)
+    }
+  },
+  getChampSelectState: (): Promise<ChampSelectState | null> =>
+    ipcRenderer.invoke('champSelect:state'),
+  onChampSelectChanged: (cb: (state: ChampSelectState) => void): (() => void) => {
+    const handler = (_e: unknown, state: ChampSelectState): void => cb(state)
+    ipcRenderer.on('champSelect:changed', handler)
+    return () => {
+      ipcRenderer.removeListener('champSelect:changed', handler)
     }
   }
 }

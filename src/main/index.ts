@@ -47,14 +47,27 @@ app.whenReady().then(() => {
 
   const win = createWindow()
 
-  // League client identity (spec 006): bind the renderer push to this window,
-  // then begin detecting the active player from the live League client. When a
-  // player logs in, the listener pushes `identity:changed` and the app reloads.
+  // League client identity (spec 006) + LCU connection observer (spec 007):
+  // bind the renderer push to this window, wire identity to the live client,
+  // then start the shared connection observer. identity.start() registers its
+  // observer subscription synchronously and resolves the cached player so the
+  // app works offline; starting the observer last begins emitting up/down edges
+  // to the now-subscribed gateway. When a player logs in, the listener pushes
+  // `identity:changed` and the app reloads.
   if (container) {
     container.lcuEventListener.bind(win)
+    container.champSelectListener.bind(win)
     container.identityService
       .start()
       .catch((err) => console.error('identity service failed to start:', err))
+    // Live game feed (spec 007): register the gameflow + champ-select
+    // subscriptions, then start the shared gateway (which opens the WS on the
+    // observer's 'up' edge), then start the observer — so by the first 'up' the
+    // topics are already subscribed.
+    container.liveGameService.start()
+    container.champSelectService.start()
+    container.liveClient.start()
+    container.lcuConnection.start()
   }
 
   app.on('activate', () => {
@@ -64,6 +77,10 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   container?.identityService.stop()
+  container?.liveGameService.stop()
+  container?.champSelectService.stop()
+  container?.liveClient.stop()
+  container?.lcuConnection.stop()
   closeDatabase()
   if (process.platform !== 'darwin') app.quit()
 })

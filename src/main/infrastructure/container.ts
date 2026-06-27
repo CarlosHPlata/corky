@@ -52,6 +52,15 @@ import { RestoreCoachingConfigDefaults } from '../application/commands/RestoreCo
 import { MatchService } from '../application/services/Match/MatchService'
 import { IdentityService } from '../application/services/Identity/IdentityService'
 import { LcuLeagueClientGateway } from '../adapters/driven/lcu/LcuLeagueClientGateway'
+import { LockfileSource } from '../adapters/driven/lcu/lockfileSource'
+import { LcuConnectionService } from '../adapters/driven/lcu/LcuConnectionService'
+import { lcuPing } from '../adapters/driven/lcu/lcuHttp'
+import { LcuLiveClientGateway } from '../adapters/driven/lcu/LcuLiveClientGateway'
+import { LiveGameService } from '../application/services/LiveGame/LiveGameService'
+import { ChampSelectService } from '../application/services/ChampSelect/ChampSelectService'
+import { GetChampSelectState } from '../application/queries/GetChampSelectState'
+import { ChampSelectListener } from '../adapters/driving/ChampSelectListener'
+import { eventBus } from '../application/events/EventBus'
 import { GetClientStatus } from '../application/queries/GetClientStatus'
 import { LcuEventListener } from '../adapters/driving/LcuEventListener'
 import { observed } from './observe'
@@ -116,11 +125,20 @@ export function buildContainer() {
     )
   )
 
-  // League client identity (spec 006). The active player comes from the live
-  // League client (or the cached last-known player), resolved by IdentityService.
-  // The LCU adapter reads the player's own identity over the lockfile-authed
-  // loopback API; the listener pushes identity changes to the renderer.
-  const leagueClient = new LcuLeagueClientGateway()
+  // League client identity (spec 006) + the shared LCU connection observer
+  // (spec 007). One `LcuConnectionService` is the single source of truth for
+  // "is the client API up": it watches the lockfile and pings the API to
+  // confirm the loopback server is actually serving (a present lockfile alone
+  // doesn't mean it is). Every client-aware feature rides this one instance —
+  // identity today, champ-select/live-feed next. The active player comes from
+  // the live client (or the cached last-known player), resolved by
+  // IdentityService; the listener pushes identity changes to the renderer.
+  const lockfileSource = new LockfileSource()
+  const lcuConnection = new LcuConnectionService({
+    readLockfile: () => lockfileSource.read(),
+    ping: (info) => lcuPing(info)
+  })
+  const leagueClient = new LcuLeagueClientGateway(lockfileSource, lcuConnection)
   const identityService = app(
     'IdentityService',
     new IdentityService(leagueClient, matchRepo, {
@@ -130,6 +148,23 @@ export function buildContainer() {
   )
   const getClientStatus = app('GetClientStatus', new GetClientStatus(identityService))
   const lcuEventListener = new LcuEventListener(identityService)
+
+  // Live game feed (spec 007). The LCU WAMP WebSocket rides the SAME shared
+  // connection observer: it opens when the API is up and subscribes to the
+  // gameflow phase + champ-select session. LiveGameService translates phase
+  // transitions into domain events (ChampSelectEntered / GameStarted /
+  // GameEnded) on the in-process bus, where downstream pipelines attach later.
+  const liveClient = new LcuLiveClientGateway(lcuConnection)
+  const liveGameService = app(
+    'LiveGameService',
+    new LiveGameService(liveClient, { emit: (e) => eventBus.emit(e) })
+  )
+  // Live champ select (spec 007): builds the roster/bans DTO from the same WS
+  // feed and pushes it to the renderer; the listener also brings the window to
+  // the front when champ select opens.
+  const champSelectService = app('ChampSelectService', new ChampSelectService(liveClient))
+  const getChampSelectState = app('GetChampSelectState', new GetChampSelectState(champSelectService))
+  const champSelectListener = new ChampSelectListener(champSelectService)
 
   const syncRecentMatches = app('SyncRecentMatches', new SyncRecentMatches(riotClient, matchRepo))
   const syncSummonerProfile = app(
@@ -253,6 +288,12 @@ export function buildContainer() {
     identityService,
     getClientStatus,
     leagueClient,
+    lcuConnection,
+    liveClient,
+    liveGameService,
+    champSelectService,
+    getChampSelectState,
+    champSelectListener,
     lcuEventListener,
     getSummonerProfile,
     getLpHistory,

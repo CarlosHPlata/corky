@@ -52,3 +52,22 @@ export function lcuGet(info: LockfileInfo, path: string, timeoutMs = 2500): Prom
     req.end()
   })
 }
+
+/**
+ * Readiness probe for `LcuConnectionService` (spec 007). A present lockfile only
+ * means the client is *starting*; the API binds its loopback port a beat later.
+ * "Up" is defined as ANY HTTP response — even a 404 means the server is serving.
+ * A refused connection / timeout (lcuGet rejects) means it is not ready yet.
+ *
+ * Login-agnostic on purpose: it pings `gameflow-phase` (tiny, served very early
+ * regardless of whether a summoner is logged in) so readiness is independent of
+ * identity, which is a separate concern owned by the identity gateway.
+ */
+export async function lcuPing(info: LockfileInfo, timeoutMs = 1500): Promise<boolean> {
+  try {
+    const res = await lcuGet(info, '/lol-gameflow/v1/gameflow-phase', timeoutMs)
+    return res.status > 0
+  } catch {
+    return false
+  }
+}

@@ -18,13 +18,25 @@ interface ChampAvatarProps {
 export function ChampAvatar({ name, ...rest }: ChampAvatarProps) {
   const [src, setSrc] = useState<string | undefined>(() => champImgUrl(name) ?? undefined)
 
+  // Re-resolve whenever `name` changes — e.g. a pick-order swap reuses this same
+  // avatar instance (same cell) but hands it a new champion. Keep the previous
+  // src until the new one resolves so the slot doesn't flash empty mid-load.
   useEffect(() => {
-    if (src) return
+    const url = champImgUrl(name)
+    if (url) {
+      setSrc(url)
+      return
+    }
+    let alive = true
     ensureDDLoaded().then(() => {
-      const url = champImgUrl(name)
-      if (url) setSrc(url)
+      if (!alive) return
+      const resolved = champImgUrl(name)
+      if (resolved) setSrc(resolved)
     })
-  }, [name, src])
+    return () => {
+      alive = false
+    }
+  }, [name])
 
   return <Avatar src={src} name={name} {...rest} />
 }

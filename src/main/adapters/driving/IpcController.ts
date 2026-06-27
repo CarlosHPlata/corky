@@ -24,6 +24,7 @@ import type { ResolveProposalInput, SaveReflectionInput } from '@shared/types'
 import type { AnalyzeMatchOptions, ChatTurn } from '@shared/types'
 import type { GetSessionAnalysis } from '../../application/queries/GetSessionAnalysis'
 import type { GetClientStatus } from '../../application/queries/GetClientStatus'
+import type { GetChampSelectState } from '../../application/queries/GetChampSelectState'
 import type { AnalyzeSession } from '../../application/commands/AnalyzeSession'
 import type { GetSessionGoal } from '../../application/queries/GetSessionGoal'
 import type { SaveSessionGoal } from '../../application/commands/SaveSessionGoal'
@@ -56,6 +57,7 @@ export function registerIpcHandlers(deps: {
   listReflections: ListReflections
   getSessionAnalysis: GetSessionAnalysis
   getClientStatus: GetClientStatus
+  getChampSelectState: GetChampSelectState
   analyzeSession: AnalyzeSession
   getSessionGoal: GetSessionGoal
   saveSessionGoal: SaveSessionGoal
@@ -91,6 +93,12 @@ export function registerIpcHandlers(deps: {
   // directly to the renderer by LcuEventListener; this is the on-demand read.
   ipcMain.handle('identity:status', () => {
     return deps.getClientStatus.execute()
+  })
+
+  // Live champ select (spec 007). Live updates are pushed via `champSelect:changed`
+  // by ChampSelectListener; this is the on-demand read for first paint.
+  ipcMain.handle('champSelect:state', () => {
+    return deps.getChampSelectState.execute()
   })
 
   ipcMain.handle('summoner:lp-history', () => {

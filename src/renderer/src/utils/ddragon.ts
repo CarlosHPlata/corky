@@ -2,6 +2,7 @@ const BASE = 'https://ddragon.leagueoflegends.com'
 
 interface DDChampEntry {
   id: string
+  key: string
   name: string
   image: { full: string }
 }
@@ -26,6 +27,9 @@ interface DDRuneStyle {
 // Module-level cache — loaded once per renderer session.
 let version: string | null = null
 let nameToImage: Map<string, string> | null = null
+// Champion resolution by the numeric championId the LCU/champ-select feed gives
+// (DDragon's `key`), separate from the name/alias index above.
+let champById: Map<number, { name: string; image: string }> | null = null
 let loadPromise: Promise<void> | null = null
 
 // Loadout data (items / summoner spells / runes), loaded lazily on first
@@ -46,10 +50,13 @@ async function load(): Promise<void> {
   }
 
   nameToImage = new Map()
+  champById = new Map()
   for (const entry of Object.values(json.data)) {
     // Index by display name ("Lee Sin") AND by DD key ("LeeSin") for resilience.
     nameToImage.set(entry.name, entry.image.full)
     nameToImage.set(entry.id, entry.image.full)
+    // ...and by the numeric championId (DDragon `key`) for the champ-select feed.
+    champById.set(Number(entry.key), { name: entry.name, image: entry.image.full })
   }
 }
 
@@ -101,6 +108,17 @@ export function champImgUrl(displayName: string): string | null {
 export function profileIconUrl(iconId: number): string | null {
   if (!version) return null
   return `${BASE}/cdn/${version}/img/profileicon/${iconId}.png`
+}
+
+/** Champion display name from the numeric championId (champ-select feed). */
+export function champNameById(id: number): string | null {
+  return champById?.get(id)?.name ?? null
+}
+
+/** Champion square icon URL from the numeric championId. */
+export function champImgUrlById(id: number): string | null {
+  const file = champById?.get(id)?.image
+  return version && file ? `${BASE}/cdn/${version}/img/champion/${file}` : null
 }
 
 export function itemName(id: number): string | null {
